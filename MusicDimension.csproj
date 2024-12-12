@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="HidSharp" Version="2.1.0" />
     <PackageReference Include="LegoDimensions" Version="1.7.0" />
+    <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
   </ItemGroup>
 
 </Project>
