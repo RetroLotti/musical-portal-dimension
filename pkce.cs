@@ -21,7 +21,7 @@ namespace MusicDimension
         private int expiresIn;
         private DateTime createdAt;
 
-        private async Task<string?> RefreshAccessTokenAsync(string clientId, string lastKnownRefreshToken)
+        private async Task<SpotifyTokenResponse> RefreshAccessTokenAsync(string clientId, string lastKnownRefreshToken)
         {
             using var httpClient = new HttpClient();
 
@@ -43,7 +43,7 @@ namespace MusicDimension
             var json = await response.Content.ReadAsStringAsync();
             var tokenResponse = JsonConvert.DeserializeObject<SpotifyTokenResponse>(json);
 
-            return tokenResponse?.AccessToken;
+            return tokenResponse;
         }
 
         private Task<bool> SaveTokenAsync()
@@ -77,7 +77,10 @@ namespace MusicDimension
 
                 if (tokens.IsExpired)
                 {
-                    var newAccessToken = await RefreshAccessTokenAsync(ClientId, refreshToken);
+                    var newToken = await RefreshAccessTokenAsync(ClientId, refreshToken);
+                    accessToken = newToken.AccessToken;
+                    expiresIn = newToken.ExpiresIn;
+                    createdAt = newToken.CreatedAt;
                 }
             }
             else
@@ -121,7 +124,7 @@ namespace MusicDimension
                 expiresIn = tokenResponse.ExpiresIn;
                 createdAt = tokenResponse.CreatedAt;
 
-                var success = await SaveTokenAsync();
+                await SaveTokenAsync();
             }
 
             // 6. Spotify Client mit dem Access Token verwenden
@@ -136,7 +139,7 @@ namespace MusicDimension
             var devices = await spotify.Player.GetAvailableDevices();
             var deviceId = devices.Devices.FirstOrDefault(d => d.Type == "Smartphone")?.Id;
 
-            var searchRequest = new SearchRequest(SearchRequest.Types.Artist | SearchRequest.Types.Album, "welle:erdball Tanzmusik für Roboter");
+            var searchRequest = new SearchRequest(SearchRequest.Types.Artist | SearchRequest.Types.Album, "welle:erdball");
             var searchResult = await spotify.Search.Item(searchRequest);
             // spotify:album:6r5Z1GCgD8diUD9inajKvd
             // ende meins
