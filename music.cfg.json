@@ -1,0 +1,28 @@
+{
+  "validSourceTypes":  ["spotify", "local", "other"],
+
+  "registeredTags": [
+    {
+      "uid": "af34d0",
+      "name": "LEGO Dimensions Beetlejuice",
+      "songs": [
+        {
+          "name": "This is Halloween",
+          "type": "spotify",
+          "path": "track:63y2aL2dT6zzw8FOSLaNrp"
+        }
+      ]
+    },
+    {
+      "uid": "af34d0",
+      "name": "LEGO Dimensions Gandalf",
+      "songs": [
+        {
+          "name": "The Shire",
+          "type": "spotify",
+          "path": "track:asdf"
+        }
+      ]
+    }
+  ]
+}

@@ -10,24 +10,55 @@ using System.Threading.Tasks;
 
 namespace MusicDimension
 {
-    public class PkceTest
+    public class SpotifyHandler(string clientId)
     {
-        private const string RedirectUri = "http://localhost:8888/callback"; // Muss mit der Redirect URI im Spotify Dashboard übereinstimmen
-        private const string ClientId = "c97ae89ab8cd4704bc2f83d3cd3efb6d"; // Deine Client ID hier einfügen
         private const string SpotifyTokenUrl = "https://accounts.spotify.com/api/token";
+        private const string RedirectUri = "http://localhost:8888/callback"; 
 
-        private string accessToken;
-        private string refreshToken;
-        private int expiresIn;
-        private DateTime createdAt;
+        private string _accessToken = string.Empty;
+        private string _refreshToken = string.Empty;
+        private int _expiresIn;
+        private DateTime _createdAt;
 
-        private async Task<SpotifyTokenResponse> RefreshAccessTokenAsync(string clientId, string lastKnownRefreshToken)
+        public async Task PlayAsync(string uri)
+        {
+            // check for or refresh access token
+            await CheckToken();
+
+            // create client
+            var spotify = new SpotifyClient(_accessToken);
+
+            // example for reading user info
+            //var profile = await spotify.UserProfile.Current();
+            //Console.WriteLine($"Hello, {profile.DisplayName}! Your Spotify ID is {profile.Id}");
+
+            var devices = await spotify.Player.GetAvailableDevices();
+            var deviceId = devices.Devices.FirstOrDefault(d => d.Type == "Smartphone")?.Id;
+
+            // example for searching
+            //var searchRequest = new SearchRequest(SearchRequest.Types.Artist | SearchRequest.Types.Album, "welle:erdball");
+            //var searchResult = await spotify.Search.Item(searchRequest);
+
+            // actually play an album or song
+            // TODO: save position of current track before changing the song or resume from saved position
+            var playbackRequest = new PlayerResumePlaybackRequest
+            {
+                // TODO: extend so that more can be given than only one track
+                //ContextUri = searchResult.Albums.Items[9].Uri, // for an album
+                Uris = new List<string> { uri },                  // for a sinlge song or track from contexturi album
+                DeviceId = deviceId
+            };
+
+            await spotify.Player.ResumePlayback(playbackRequest);
+        }
+
+        private static async Task<SpotifyTokenResponse?> RefreshTokenAsync(string clientId, string refreshToken)
         {
             using var httpClient = new HttpClient();
 
             // Prepare the request content
             var content = new StringContent(
-                $"grant_type=refresh_token&refresh_token={lastKnownRefreshToken}&client_id={clientId}",
+                $"grant_type=refresh_token&refresh_token={refreshToken}&client_id={clientId}",
                 Encoding.UTF8,
                 "application/x-www-form-urlencoded");
 
@@ -50,10 +81,10 @@ namespace MusicDimension
         {
             var tokens = new LastKnownTokens
             {
-                ExpiresIn = expiresIn,
-                AccessToken = accessToken,
-                RefreshToken = refreshToken,
-                CreatedAt = createdAt
+                ExpiresIn = _expiresIn,
+                AccessToken = _accessToken,
+                RefreshToken = _refreshToken,
+                CreatedAt = _createdAt
             };
 
             JsonFileHandler.SaveObjectToJsonFile($@".\tokens.json", tokens);
@@ -61,7 +92,7 @@ namespace MusicDimension
             return Task.FromResult(true);
         }
 
-        public async Task Test()
+        private async Task CheckToken()
         {
             // check for token file
             var tokens = JsonFileHandler.ReadObjectFromJsonFile<LastKnownTokens>($@".\tokens.json");
@@ -70,17 +101,26 @@ namespace MusicDimension
             // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
             if (tokens != null)
             {
-                accessToken = tokens.AccessToken;
-                refreshToken = tokens.RefreshToken;
-                expiresIn = tokens.ExpiresIn;
-                createdAt = tokens.CreatedAt;
+                _accessToken = tokens.AccessToken;
+                _refreshToken = tokens.RefreshToken;
+                _expiresIn = tokens.ExpiresIn;
+                _createdAt = tokens.CreatedAt;
 
                 if (tokens.IsExpired)
                 {
-                    var newToken = await RefreshAccessTokenAsync(ClientId, refreshToken);
-                    accessToken = newToken.AccessToken;
-                    expiresIn = newToken.ExpiresIn;
-                    createdAt = newToken.CreatedAt;
+                    var newToken = await RefreshTokenAsync(clientId, _refreshToken);
+                    if (newToken != null)
+                    {
+                        _accessToken = newToken.AccessToken;
+                        _expiresIn = newToken.ExpiresIn;
+                        _createdAt = newToken.CreatedAt;
+
+                        await SaveTokenAsync();
+                    }
+                    else
+                    {
+                        throw new NullReferenceException(nameof(newToken));
+                    }
                 }
             }
             else
@@ -90,7 +130,7 @@ namespace MusicDimension
                 var codeChallenge = GenerateCodeChallenge(codeVerifier);
 
                 // 2. Authorize URL erstellen
-                var loginRequest = new LoginRequest(new Uri(RedirectUri), ClientId, LoginRequest.ResponseType.Code)
+                var loginRequest = new LoginRequest(new Uri(RedirectUri), clientId, LoginRequest.ResponseType.Code)
                 {
                     CodeChallengeMethod = "S256",
                     CodeChallenge = codeChallenge,
@@ -99,8 +139,6 @@ namespace MusicDimension
 
                 var authUri = loginRequest.ToUri();
 
-                // 3. Browser öffnen, um Benutzer zu authentifizieren
-                Console.WriteLine("Öffne den Browser für die Authentifizierung...");
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = authUri.ToString(),
@@ -111,49 +149,17 @@ namespace MusicDimension
                 var authorizationCode = await WaitForAuthorizationCode();
 
                 // 5. Access Token mit PKCE anfordern
-                var tokenRequest = new PKCETokenRequest(ClientId, authorizationCode, new Uri(RedirectUri), codeVerifier);
+                var tokenRequest = new PKCETokenRequest(clientId, authorizationCode, new Uri(RedirectUri), codeVerifier);
                 var oauthClient = new OAuthClient();
                 var tokenResponse = await oauthClient.RequestToken(tokenRequest);
 
-                Console.WriteLine($"Access Token: {tokenResponse.AccessToken}");
-                Console.WriteLine($"Refresh Token: {tokenResponse.RefreshToken}");
-                Console.WriteLine($"Token expires in: {tokenResponse.ExpiresIn} seconds");
-
-                accessToken = tokenResponse.AccessToken;
-                refreshToken = tokenResponse.RefreshToken;
-                expiresIn = tokenResponse.ExpiresIn;
-                createdAt = tokenResponse.CreatedAt;
+                _accessToken = tokenResponse.AccessToken;
+                _refreshToken = tokenResponse.RefreshToken;
+                _expiresIn = tokenResponse.ExpiresIn;
+                _createdAt = tokenResponse.CreatedAt;
 
                 await SaveTokenAsync();
             }
-
-            // 6. Spotify Client mit dem Access Token verwenden
-            var spotify = new SpotifyClient(accessToken);
-
-            // Beispiel: Benutzerinformationen abrufen
-            var profile = await spotify.UserProfile.Current();
-            Console.WriteLine($"Hello, {profile.DisplayName}! Your Spotify ID is {profile.Id}");
-
-            // start meins
-            //const string trackUri = "spotify:track:3n3Ppam7vgaVa1iaRUc9Lp";
-            var devices = await spotify.Player.GetAvailableDevices();
-            var deviceId = devices.Devices.FirstOrDefault(d => d.Type == "Smartphone")?.Id;
-
-            var searchRequest = new SearchRequest(SearchRequest.Types.Artist | SearchRequest.Types.Album, "welle:erdball");
-            var searchResult = await spotify.Search.Item(searchRequest);
-            // spotify:album:6r5Z1GCgD8diUD9inajKvd
-            // ende meins
-
-
-
-            // Song auf dem Gerät abspielen
-            var playbackRequest = new PlayerResumePlaybackRequest
-            {
-                ContextUri = searchResult.Albums.Items[9].Uri,
-                //Uris = new List<string> {  },
-                DeviceId = deviceId
-            };
-            await spotify.Player.ResumePlayback(playbackRequest);
         }
         
         // Funktion zum Code-Verifier-Generieren
@@ -176,7 +182,7 @@ namespace MusicDimension
         }
 
         // Funktion, die auf die Weiterleitung wartet und den Code extrahiert
-        private static async Task<string?> WaitForAuthorizationCode()
+        private static async Task<string> WaitForAuthorizationCode()
         {
             var listener = new HttpListener();
             listener.Prefixes.Add(RedirectUri + "/");

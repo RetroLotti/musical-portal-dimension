@@ -8,6 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove=".gitattributes" />
+    <None Remove=".gitignore" />
+    <None Remove="README.md" />
+    <None Remove="UNLICENSE.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="HidSharp" Version="2.1.0" />
     <PackageReference Include="LegoDimensions" Version="1.7.0" />
     <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
