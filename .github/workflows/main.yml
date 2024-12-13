@@ -1,12 +1,13 @@
 name: Build and Release
 
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - master
+  # pull_request:
+  #   branches:
+  #     - master
 
 defaults:
   run:
@@ -16,19 +17,7 @@ jobs:
   version:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.gitversion.outputs.version }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup GitVersion
-        uses: gittools/actions/gitversion/setup@v0.10.2
-        with:
-          versionSpec: '5.x'
-
-      - name: Get version
-        id: gitversion
-        uses: gittools/actions/gitversion/execute@v0.10.2
+      version: '1.0.0'
 
   build:
     needs: version
@@ -49,7 +38,8 @@ jobs:
         run: dotnet restore
 
       - name: Build project
-        run: dotnet build --configuration Release /p:Version=${{ needs.version.outputs.version }}
+        #run: dotnet build --configuration Release /p:Version=${{ needs.version.outputs.version }}
+        run: dotnet build --configuration Release
 
       - name: Publish project
         run: dotnet publish --configuration Release --runtime ${{ matrix.os == 'ubuntu-latest' && 'linux-x64' || 'win-x64' }} --self-contained true -o output
