@@ -13,11 +13,6 @@ defaults:
     shell: bash
 
 jobs:
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: '1.0.0'
-
   build:
     needs: version
     runs-on: ${{ matrix.os }}
@@ -37,8 +32,7 @@ jobs:
         run: dotnet restore
 
       - name: Build project
-        #run: dotnet build --configuration Release /p:Version=${{ needs.version.outputs.version }}
-        run: dotnet build --configuration Release
+        run: dotnet build --configuration Release /p:Version='1.0.0'
 
       - name: Publish project
         run: dotnet publish --configuration Release --runtime ${{ matrix.os == 'ubuntu-latest' && 'linux-x64' || 'win-x64' }} --self-contained true -o output
@@ -58,7 +52,6 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
       - name: Download Linux build
         uses: actions/download-artifact@v4.4.3
@@ -76,8 +69,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.version.outputs.version }}
-          release_name: Release ${{ needs.version.outputs.version }}
+          tag_name: '1.0.0'
+          release_name: Release '1.0.0'
           draft: false
           prerelease: false
 
