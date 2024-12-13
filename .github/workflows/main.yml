@@ -1,95 +1,52 @@
-name: Build and Release
-
+name: Publish Release
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
-
-defaults:
-  run:
-    shell: bash
-
+  release:
+    types: [published]
 jobs:
-  build:
-    needs: version
-    runs-on: ${{ matrix.os }}
+  release:
+    name: Release
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        kind: ['linux', 'windows', 'macOS']
+        include:
+          - kind: linux
+            os: ubuntu-latest
+            target: linux-x64
+          - kind: windows
+            os: windows-latest
+            target: win-x64
+          - kind: macOS
+            os: macos-latest
+            target: osx-x64
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9.x SDK
-        uses: actions/setup-dotnet@v3
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.x'
+          dotnet-version: 9.x
 
-      - name: Install dependencies
-        run: dotnet restore
-
-      - name: Build project
-        run: dotnet build --configuration Release /p:Version='1.0.0'
-
-      - name: Publish project
-        run: dotnet publish --configuration Release --runtime ${{ matrix.os == 'ubuntu-latest' && 'linux-x64' || 'win-x64' }} --self-contained true -o output
-
-      - name: Archive build output
+      - name: Build
+        shell: bash
         run: |
-          zip -r build-${{ matrix.os }}.zip output
-        env:
-          DOTNET_ROOT: ${{ env.DOTNET_ROOT }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4.4.3
+          tag=$(git describe --tags --abbrev=0)
+          release_name="MusicDimension-$tag-${{ matrix.target }}"
+          # Build everything
+          dotnet publish MusicDimension.csproj --framework net9.0 --runtime "${{ matrix.target }}" -c Release -o "$release_name"
+          # Pack files
+          if [ "${{ matrix.target }}" == "win-x64" ]; then
+            # Pack to zip for Windows
+            7z a -tzip "${release_name}.zip" "./${release_name}/*"
+          else
+          tar czvf "${release_name}.tar.gz" "$release_name"
+          fi
+          # Delete output directory
+          rm -r "$release_name"
+      - name: Publish .net
+        uses: softprops/action-gh-release@v2
         with:
-          name: ${{ matrix.os }}-build
-          path: build-${{ matrix.os }}.zip
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Linux build
-        uses: actions/download-artifact@v4.4.3
-        with:
-          name: ubuntu-latest-build
-
-      - name: Download Windows build
-        uses: actions/download-artifact@v4.4.3
-        with:
-          name: windows-latest-build
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+          files: "MusicDimension*"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: '1.0.0'
-          release_name: Release '1.0.0'
-          draft: false
-          prerelease: false
-
-      - name: Upload Linux build to Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build-ubuntu-latest.zip
-          asset_name: build-linux-x64.zip
-          asset_content_type: application/zip
-
-      - name: Upload Windows build to Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build-windows-latest.zip
-          asset_name: build-windows-x64.zip
-          asset_content_type: application/zip
