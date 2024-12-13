@@ -1,43 +1,108 @@
-name: Push develop w/ API
-on: workflow_dispatch
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  build:
-    name: Build
-    strategy:
-      matrix:
-        kind: ['linux', 'windows', 'macOS']
-        include:
-          - kind: linux
-            os: ubuntu-latest
-            target: linux-x64
-          - kind: windows
-            os: windows-latest
-            target: win-x64
-          - kind: macOS
-            os: macos-latest
-            target: osx-x64
-    runs-on: ${{ matrix.os }}
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.gitversion.outputs.version }}
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup dotnet
-        uses: actions/setup-dotnet@v4
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v0.10.2
         with:
-          dotnet-version: 9.x
+          versionSpec: '5.x'
 
-      - name: Build
-        shell: bash
+      - name: Get version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v0.10.2
+
+  build:
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9.x SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.x'
+
+      - name: Install dependencies
+        run: dotnet restore
+
+      - name: Build project
+        run: dotnet build --configuration Release /p:Version=${{ needs.version.outputs.version }}
+
+      - name: Publish project
+        run: dotnet publish --configuration Release --runtime ${{ matrix.os == 'ubuntu-latest' && 'linux-x64' || 'win-x64' }} --self-contained true -o output
+
+      - name: Archive build output
         run: |
-          release_name="MusicDimension-${{ matrix.target }}"
-          # Build everything
-          dotnet publish MusicDimension.csproj --framework net9.0 --runtime "${{ matrix.target }}" -c Release -o "$release_name"
-          # Pack files
-          if [ "${{ matrix.target }}" == "win-x64" ]; then
-            # Pack to zip for Windows
-            7z a -tzip "${release_name}.zip" "./${release_name}/*"
-          else
-          tar czvf "${release_name}.tar.gz" "$release_name"
-          fi
-          # Delete output directory
-          rm -r "$release_name"
+          zip -r build-${{ matrix.os }}.zip output
+        env:
+          DOTNET_ROOT: ${{ env.DOTNET_ROOT }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: ${{ matrix.os }}-build
+          path: build-${{ matrix.os }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Download Linux build
+        uses: actions/download-artifact@v4.4.3
+        with:
+          name: ubuntu-latest-build
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4.4.3
+        with:
+          name: windows-latest-build
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.version.outputs.version }}
+          release_name: Release ${{ needs.version.outputs.version }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Linux build to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: build-ubuntu-latest.zip
+          asset_name: build-linux-x64.zip
+          asset_content_type: application/zip
+
+      - name: Upload Windows build to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: build-windows-latest.zip
+          asset_name: build-windows-x64.zip
+          asset_content_type: application/zip
