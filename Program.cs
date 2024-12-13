@@ -44,8 +44,11 @@ namespace MusicDimension
         // ReSharper disable once AsyncVoidMethod
         private static async void PortalOnLegoTagEvent(object? sender, LegoTagEventArgs e)
         {
-            Console.WriteLine("# event called #");
-            if (!e.Present) return;
+            if (!e.Present)
+            {
+                await SpotifyHandler.StopAsync(); 
+                return;
+            }
 
             Console.WriteLine($"Tag is present: {e.Present} - UID: {BitConverter.ToString(e.CardUid)}");
             Console.WriteLine($"Tag is a {e.LegoTag?.GetType().Name} - Name= {e.LegoTag?.Name}");

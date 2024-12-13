@@ -28,16 +28,9 @@ namespace MusicDimension
             // create client
             var spotify = new SpotifyClient(_accessToken);
 
-            // example for reading user info
-            //var profile = await spotify.UserProfile.Current();
-            //Console.WriteLine($"Hello, {profile.DisplayName}! Your Spotify ID is {profile.Id}");
-
             var devices = await spotify.Player.GetAvailableDevices();
             var deviceId = devices.Devices.FirstOrDefault(d => d.Type == "Smartphone")?.Id;
 
-            // example for searching
-            //var searchRequest = new SearchRequest(SearchRequest.Types.Artist | SearchRequest.Types.Album, "welle:erdball");
-            //var searchResult = await spotify.Search.Item(searchRequest);
 
             // actually play an album or song
             // TODO: save position of current track before changing the song or resume from saved position
@@ -50,6 +43,20 @@ namespace MusicDimension
             };
 
             await spotify.Player.ResumePlayback(playbackRequest);
+        }
+
+        public async Task StopAsync()
+        {
+            // check for or refresh access token
+            await CheckToken();
+
+            // create client
+            var spotify = new SpotifyClient(_accessToken);
+
+            var devices = await spotify.Player.GetAvailableDevices();
+            var deviceId = devices.Devices.FirstOrDefault(d => d.Type == "Smartphone")?.Id;
+
+            await spotify.Player.PausePlayback();
         }
 
         private static async Task<SpotifyTokenResponse?> RefreshTokenAsync(string clientId, string refreshToken)
