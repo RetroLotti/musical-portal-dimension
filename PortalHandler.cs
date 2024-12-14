@@ -19,7 +19,13 @@ namespace MusicDimension
         {
             Portal = LegoPortal.GetFirstPortal();
 
-            Portal.SetColor(Pad.Center, Color.DarkOrange);
+            if (Portal == null)
+            {
+                IsConnected = false;
+                return;
+            }
+
+            Portal.SetColor(Pad.Center, Color.Green);
             Portal.SetColor(Pad.Left, Color.Black);
             Portal.SetColor(Pad.Right, Color.Black);
 

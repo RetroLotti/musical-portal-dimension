@@ -28,14 +28,16 @@ namespace MusicDimension
         }
 
         // Read an object from a JSON file
-        public static T ReadObjectFromJsonFile<T>(string filePath)
+        public static T? ReadObjectFromJsonFile<T>(string filePath)
         {
             try
             {
+                if (!File.Exists(filePath)) return default;
+
                 var jsonString = File.ReadAllText(filePath);
-                T obj = JsonSerializer.Deserialize<T>(jsonString);
+                var deserializedObject = JsonSerializer.Deserialize<T>(jsonString);
                 Console.WriteLine($"Object read from {filePath}");
-                return obj;
+                return deserializedObject;
             }
             catch (Exception ex)
             {

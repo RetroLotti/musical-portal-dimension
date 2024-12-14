@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace MusicDimension
 {
-    public class SpotifyHandler(string clientId)
+    public class SpotifyHandler(Config config)
     {
         private const string SpotifyTokenUrl = "https://accounts.spotify.com/api/token";
         private const string RedirectUri = "http://localhost:8888/callback"; 
@@ -29,8 +29,7 @@ namespace MusicDimension
             var spotify = new SpotifyClient(_accessToken);
 
             var devices = await spotify.Player.GetAvailableDevices();
-            var deviceId = devices.Devices.FirstOrDefault(d => d.Type == "Smartphone")?.Id;
-
+            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
 
             // actually play an album or song
             // TODO: save position of current track before changing the song or resume from saved position
@@ -54,7 +53,7 @@ namespace MusicDimension
             var spotify = new SpotifyClient(_accessToken);
 
             var devices = await spotify.Player.GetAvailableDevices();
-            var deviceId = devices.Devices.FirstOrDefault(d => d.Type == "Smartphone")?.Id;
+            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
 
             await spotify.Player.PausePlayback();
         }
@@ -94,7 +93,7 @@ namespace MusicDimension
                 CreatedAt = _createdAt
             };
 
-            JsonFileHandler.SaveObjectToJsonFile($@".\tokens.json", tokens);
+            JsonFileHandler.SaveObjectToJsonFile(config.TokenFileName, tokens);
 
             return Task.FromResult(true);
         }
@@ -102,7 +101,7 @@ namespace MusicDimension
         private async Task CheckToken()
         {
             // check for token file
-            var tokens = JsonFileHandler.ReadObjectFromJsonFile<LastKnownTokens>($@".\tokens.json");
+            var tokens = JsonFileHandler.ReadObjectFromJsonFile<LastKnownTokens>(config.TokenFileName);
 
             // refresh else new connect
             // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
@@ -115,7 +114,7 @@ namespace MusicDimension
 
                 if (tokens.IsExpired)
                 {
-                    var newToken = await RefreshTokenAsync(clientId, _refreshToken);
+                    var newToken = await RefreshTokenAsync(config.ClientId, _refreshToken);
                     if (newToken != null)
                     {
                         _accessToken = newToken.AccessToken;
@@ -137,7 +136,7 @@ namespace MusicDimension
                 var codeChallenge = GenerateCodeChallenge(codeVerifier);
 
                 // 2. Authorize URL erstellen
-                var loginRequest = new LoginRequest(new Uri(RedirectUri), clientId, LoginRequest.ResponseType.Code)
+                var loginRequest = new LoginRequest(new Uri(RedirectUri), config.ClientId, LoginRequest.ResponseType.Code)
                 {
                     CodeChallengeMethod = "S256",
                     CodeChallenge = codeChallenge,
@@ -156,7 +155,7 @@ namespace MusicDimension
                 var authorizationCode = await WaitForAuthorizationCode();
 
                 // 5. Access Token mit PKCE anfordern
-                var tokenRequest = new PKCETokenRequest(clientId, authorizationCode, new Uri(RedirectUri), codeVerifier);
+                var tokenRequest = new PKCETokenRequest(config.ClientId, authorizationCode, new Uri(RedirectUri), codeVerifier);
                 var oauthClient = new OAuthClient();
                 var tokenResponse = await oauthClient.RequestToken(tokenRequest);
 
@@ -208,7 +207,7 @@ namespace MusicDimension
             response.Close();
 
             listener.Stop();
-            return code;
+            return code ?? string.Empty;
         }
     }
 }
