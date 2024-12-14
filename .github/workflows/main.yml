@@ -47,6 +47,6 @@ jobs:
       - name: Publish .net
         uses: softprops/action-gh-release@v2
         with:
-          files: "MusicDimension*"
+          files: "MusicDimension-*"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
