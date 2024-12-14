@@ -1,0 +1,45 @@
+{
+  "validSourceTypes":  [ "spotify", "local", "other" ],
+  "unusedTags": [
+    { "uid": "04-04-57-82-7C-4A-81", "name": "Peter Venkman" },
+    { "uid": "04-2F-8C-02-9A-40-80", "name": "Batman" },
+    { "uid": "04-06-BC-7A-5C-49-81", "name": "The Doctor" },
+    { "uid": "04-A2-81-0A-B4-43-80", "name": "Scooby Doo" },
+    { "uid": "04-71-8A-A2-13-43-80", "name": "Shaggy" },
+    { "uid": "04-20-B4-C2-6D-40-81", "name": "Wyldstyle" },
+    { "uid": "04-36-EC-62-19-4A-81", "name": "Empty Vehicle Tag" },
+    { "uid": "04-AA-86-12-5B-49-80", "name": "K9" },
+    { "uid": "04-F8-63-1A-A8-48-80", "name": "Mystery Machine" },
+    { "uid": "04-78-86-A2-B9-3F-80", "name": "Empty Vehicle Tag" },
+    { "uid": "04-8A-59-02-5B-49-80", "name": "Scooby Snack" },
+    { "uid": "04-43-35-92-75-40-81", "name": "Batmobile" },
+    { "uid": "04-7A-B7-2A-F6-48-81", "name": "Empty Vehicle Tag" },
+    { "uid": "04-3C-82-12-5B-49-80", "name": "T.A.R.D.I.S." }
+  ],
+  "registeredTags": [
+    {
+      "uid": "04-27-C1-9A-F0-4A-81",
+      "name": "Beetlejuice",
+      "songs": [
+        {
+          "name": "This is Halloween",
+          "type": "spotify",
+          "spotifyType": "track",
+          "spotifyId": "63y2aL2dT6zzw8FOSLaNrp"
+        }
+      ]
+    },
+    {
+      "uid": "04-64-63-5A-9A-40-80",
+      "name": "Gandalf",
+      "songs": [
+        {
+          "name": "The Shire",
+          "type": "spotify",
+          "spotifyType": "track",
+          "spotifyId": "6zW80jVqLtgSF1yCtGHiiD"
+        }
+      ]
+    }
+  ]
+}
