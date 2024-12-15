@@ -37,7 +37,7 @@ jobs:
           tag=$(git describe --tags --abbrev=0)
           release_name="MusicDimension-$tag-${{ matrix.target }}"
           # Build everything
-          dotnet publish MusicDimension.csproj --framework net8.0 --runtime "${{ matrix.target }}" -c Release -o "$release_name" --self-contained true /p:PublishSingleFile=true
+          dotnet publish MusicDimension.csproj --framework net8.0 --runtime "${{ matrix.target }}" --configuration Release --output "$release_name" --self-contained true
           # Pack files
           if [ "${{ matrix.target }}" == "win-x64" ]; then
             # Pack to zip for Windows
