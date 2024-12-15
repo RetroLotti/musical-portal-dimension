@@ -4,9 +4,9 @@ namespace MusicDimension
 {
     internal static class Program
     {
-        private static readonly string MusicFileName = $@"{Path.DirectorySeparatorChar}config{Path.DirectorySeparatorChar}music.json";
-        private static readonly string ConfigFileName = $@"{Path.DirectorySeparatorChar}config{Path.DirectorySeparatorChar}config.json";
-        private static readonly string TokenFileName = $@"{Path.DirectorySeparatorChar}config{Path.DirectorySeparatorChar}tokens.json";
+        private static readonly string MusicFileName = Path.Combine($"{Environment.CurrentDirectory}", "config", "music.json");
+        private static readonly string ConfigFileName = Path.Combine($"{Environment.CurrentDirectory}", "config", "config.json");
+        private static readonly string TokenFileName = Path.Combine($"{Environment.CurrentDirectory}", "config", "tokens.json");
 
         private static PortalHandler _portalHandler = null!;
         private static SpotifyHandler _spotifyHandler = null!;
@@ -20,13 +20,8 @@ namespace MusicDimension
             if (!CheckFiles()) return;
 
             // read general config from file
-            _config = JsonFileHandler.ReadObjectFromJsonFile<Config>(ConfigFileName) ?? new Config
-            {
-                ClientId = string.Empty,
-                ClientSecret = string.Empty,
-                SpotifyDeviceName = string.Empty,
-                TokenFileName = string.Empty
-            };
+            _config = JsonFileHandler.ReadObjectFromJsonFile<Config>(ConfigFileName);
+            if(_config == null) return;
             _config.TokenFileName = TokenFileName;
 
             // read music config from file
