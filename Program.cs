@@ -4,9 +4,9 @@ namespace MusicDimension
 {
     internal static class Program
     {
-        private const string MusicFileName = @".\config\music.json";
-        private const string ConfigFileName = @".\config\config.json";
-        private const string TokenFileName = @".\config\tokens.json";
+        private static readonly string MusicFileName = $@"{Path.DirectorySeparatorChar}config{Path.DirectorySeparatorChar}music.json";
+        private static readonly string ConfigFileName = $@"{Path.DirectorySeparatorChar}config{Path.DirectorySeparatorChar}config.json";
+        private static readonly string TokenFileName = $@"{Path.DirectorySeparatorChar}config{Path.DirectorySeparatorChar}tokens.json";
 
         private static PortalHandler _portalHandler = null!;
         private static SpotifyHandler _spotifyHandler = null!;
