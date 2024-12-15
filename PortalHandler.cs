@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using HidSharp;
-using LegoDimensions;
+﻿using LegoDimensions;
 using LegoDimensions.Portal;
 
 namespace MusicDimension
@@ -17,7 +11,14 @@ namespace MusicDimension
 
         public void Connect()
         {
-            Portal = LegoPortal.GetFirstPortal();
+            try
+            {
+                Portal = LegoPortal.GetFirstPortal();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
 
             if (Portal == null)
             {
