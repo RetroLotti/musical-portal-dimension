@@ -16,6 +16,9 @@ namespace MusicDimension
 
         private static void Main(string[] args)
         {
+            // check for config files
+            if (!CheckFiles()) return;
+
             // read general config from file
             _config = JsonFileHandler.ReadObjectFromJsonFile<Config>(ConfigFileName) ?? new Config
             {
@@ -36,6 +39,7 @@ namespace MusicDimension
             // try to connect/identify the portal
             _portalHandler.Connect();
 
+            // check if connection was successful
             if (!_portalHandler.IsConnected)
             {
                 Console.WriteLine("Press any key to exit");
@@ -53,6 +57,16 @@ namespace MusicDimension
             }
 
             _portalHandler.Disconnect();
+        }
+
+        private static bool CheckFiles()
+        {
+            var configFile = new FileInfo(ConfigFileName);
+            if (!configFile.Exists) Console.WriteLine($"{configFile.FullName} does not exist or permission is denied.");
+            var musicFile = new FileInfo(MusicFileName);
+            if(!musicFile.Exists) Console.WriteLine($"{musicFile.FullName} does not exist or permission is denied.");
+
+            return configFile.Exists && musicFile.Exists;
         }
 
         // ReSharper disable once AsyncVoidMethod
