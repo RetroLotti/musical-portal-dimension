@@ -24,6 +24,8 @@ namespace MusicDimension
             if(_config == null) return;
             _config.TokenFileName = TokenFileName;
 
+            Console.WriteLine($"clientid {_config.ClientId[..3]}****\nclientsecret {_config.ClientSecret[..3]}****");
+
             // read music config from file
             _musicConfig = JsonFileHandler.ReadObjectFromJsonFile<MusicConfig>(MusicFileName) ?? new MusicConfig();
 
@@ -78,6 +80,8 @@ namespace MusicDimension
 
             // if tag is read => play associated song / album
             var songs = GetMusic(BitConverter.ToString(e.CardUid));
+
+            Console.WriteLine($"{songs.Count} song(s) found.");
 
             if (songs.Count > 0)
             {
