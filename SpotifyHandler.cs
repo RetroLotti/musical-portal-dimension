@@ -31,6 +31,18 @@ namespace MusicDimension
             var devices = await spotify.Player.GetAvailableDevices();
             var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
 
+            if (deviceId == null)
+            {
+                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
+                Console.WriteLine("Showing available devices: ");
+                for (var i = 0; i < devices.Devices.Count; i++)
+                {
+                    var device = devices.Devices[i];
+                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
+                }
+                Console.WriteLine("End of list.");
+            }
+
             // actually play an album or song
             // TODO: save position of current track before changing the song or resume from saved position
             var playbackRequest = new PlayerResumePlaybackRequest
@@ -144,6 +156,8 @@ namespace MusicDimension
                 };
 
                 var authUri = loginRequest.ToUri();
+
+                Console.WriteLine($"open this link to authenticate:\n{authUri}");
 
                 Process.Start(new ProcessStartInfo
                 {
