@@ -1,11 +1,4 @@
-﻿using System;
-using System.Reflection.Metadata.Ecma335;
-using HidSharp;
-using LegoDimensions;
-using LegoDimensions.Portal;
-using SpotifyAPI.Web;
-using SpotifyAPI.Web.Http;
-using LegoTagEventArgs = LegoDimensions.LegoTagEventArgs;
+﻿using LegoTagEventArgs = LegoDimensions.LegoTagEventArgs;
 
 namespace MusicDimension
 {
@@ -45,7 +38,6 @@ namespace MusicDimension
 
             if (!_portalHandler.IsConnected)
             {
-                Console.WriteLine("No portal found!");
                 Console.WriteLine("Press any key to exit");
                 Console.ReadKey();
                 return;

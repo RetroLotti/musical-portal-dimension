@@ -7,7 +7,7 @@ jobs:
     name: Release
     strategy:
       matrix:
-        kind: ['linux', 'windows', 'macOS']
+        kind: ['linux', 'linux-arm', 'windows', 'macOS']
         include:
           - kind: linux
             os: ubuntu-latest
@@ -18,6 +18,9 @@ jobs:
           - kind: macOS
             os: macos-latest
             target: osx-x64
+          - kind: linux-arm
+            os: ubuntu-latest
+            target: linux-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -26,7 +29,7 @@ jobs:
       - name: Setup dotnet
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.x
+          dotnet-version: 8.x
 
       - name: Build
         shell: bash
@@ -34,7 +37,7 @@ jobs:
           tag=$(git describe --tags --abbrev=0)
           release_name="MusicDimension-$tag-${{ matrix.target }}"
           # Build everything
-          dotnet publish MusicDimension.csproj --framework net9.0 --runtime "${{ matrix.target }}" -c Release -o "$release_name"
+          dotnet publish MusicDimension.csproj --framework net8.0 --runtime "${{ matrix.target }}" -c Release -o "$release_name" --self-contained true /p:PublishSingleFile=true
           # Pack files
           if [ "${{ matrix.target }}" == "win-x64" ]; then
             # Pack to zip for Windows
