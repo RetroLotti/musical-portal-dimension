@@ -1,5 +1,10 @@
 {
   "clientId": "",
   "clientSecret": "",
-  "spotifyDeviceName": "" 
+  "spotifyDeviceName": "",
+  //"musicControlTags": {
+  //},
+  "pausePlayback": "FF-FF-FF-FF-FF-FF-FF",
+  "nextTrack": "FF-FF-FF-FF-FF-FF-FF",
+  "previousTrack": "FF-FF-FF-FF-FF-FF-FF"
 }

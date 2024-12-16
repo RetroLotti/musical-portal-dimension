@@ -14,7 +14,7 @@
         private static Config _config = null!;
         private static MusicConfig _musicConfig = null!;
 
-        private static async Task Main(string[] args)
+        private static void Main(string[] args)
         {
             // check for config files
             if (!CheckFiles()) return;
@@ -50,8 +50,8 @@
             // add event to react on placing an nfc tag on any pad
             _portalHandler.Portal!.LegoTagEvent += PortalOnLegoTagEvent;
 
-            Console.WriteLine("Portal is now open!");
-            Console.WriteLine("Press any key to close it.");
+            Console.WriteLine("Portal is now active!");
+            Console.WriteLine("Press any key to deactivate.");
 
             if (Environment.UserInteractive)
             {
@@ -81,6 +81,9 @@
         {
             if (!e.Present)
             {
+                if (!_portalHandler.IsTransferring) return;
+
+                _portalHandler.IsTransferring = false;
                 await _spotifyHandler.StopAsync();
                 Console.WriteLine("Playback stopped!");
                 return;
@@ -98,6 +101,7 @@
 
             // play first song in the list for now (or the album or playlist)
             await _spotifyHandler.PlayAsync(songs[0].SpotifyType.ToString().ToLower(), songs[0].SpotifyId);
+            _portalHandler.IsTransferring = true;
             Console.WriteLine($"Now playing: {songs[0].Name}");
         }
 

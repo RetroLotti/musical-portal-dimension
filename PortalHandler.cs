@@ -9,6 +9,8 @@
 
         public bool IsConnected { get; private set; }
 
+        public bool IsTransferring { get; set; }
+
         public void Connect()
         {
             try
@@ -26,17 +28,19 @@
                 return;
             }
 
-            Portal.SetColor(Pad.Left, Color.Green);
-            Thread.Sleep(500);
-            Portal.SetColor(Pad.Left, Color.Black);
-            Thread.Sleep(500);
+            Portal.SetColor(Pad.Center, Color.Red);
+            Thread.Sleep(100);
+            Portal.SetColor(Pad.Center, Color.OrangeRed);
+            Thread.Sleep(100);
+            Portal.SetColor(Pad.Center, Color.Orange);
+            Thread.Sleep(100);
+            Portal.SetColor(Pad.Center, Color.Yellow);
+            Thread.Sleep(100);
+            Portal.SetColor(Pad.Center, Color.YellowGreen);
+            Thread.Sleep(100);
             Portal.SetColor(Pad.Center, Color.Green);
-            Thread.Sleep(500);
+            Thread.Sleep(100);
             Portal.SetColor(Pad.Center, Color.Black);
-            Thread.Sleep(500);
-            Portal.SetColor(Pad.Right, Color.Green);
-            Thread.Sleep(500);
-            Portal.SetColor(Pad.Right, Color.Black);
 
             IsConnected = true;
         }

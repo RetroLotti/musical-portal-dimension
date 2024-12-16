@@ -19,6 +19,7 @@
   <ItemGroup>
     <PackageReference Include="HidSharp" Version="2.1.0" />
     <PackageReference Include="LegoDimensions" Version="1.7.0" />
+    <PackageReference Include="LibVLCSharp" Version="3.9.1" />
     <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
   </ItemGroup>
 
