@@ -93,6 +93,25 @@
 
             Console.WriteLine($"{uid} | {e.LegoTag?.GetType().Name} | {e.LegoTag?.Name}");
 
+            // check if tag is control tag
+            if (_musicConfig.ControlTags.TryGetValue(uid, out var value))
+            {
+                switch (value)
+                {
+                    
+                    case "next":
+                        await _spotifyHandler.NextTrackAsync();
+                        break;
+                    case "previous":
+                        await _spotifyHandler.PreviousTrackAsync();
+                        break;
+                    default:
+                        await _spotifyHandler.PauseAsync();
+                        break;
+                }
+            }
+
+
             // if tag is read => play associated song / album
             var songs = GetMusic(uid);
 

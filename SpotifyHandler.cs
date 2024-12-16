@@ -60,7 +60,7 @@
             await spotify.Player.ResumePlayback(playbackRequest);
         }
 
-        public async Task StopAsync()
+        public async Task PauseAsync()
         {
             // check for or refresh access token
             await CheckToken();
@@ -86,6 +86,67 @@
             {
                 await spotify.Player.PausePlayback();
             }
+        }
+
+        public async Task PreviousTrackAsync()
+        {
+            // check for or refresh access token
+            await CheckToken();
+
+            // create client
+            var spotify = new SpotifyClient(_accessToken);
+
+            var devices = await spotify.Player.GetAvailableDevices();
+            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
+
+            if (deviceId == null)
+            {
+                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
+                Console.WriteLine("Showing available devices: ");
+                for (var i = 0; i < devices.Devices.Count; i++)
+                {
+                    var device = devices.Devices[i];
+                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
+                }
+                Console.WriteLine("End of list.");
+            }
+            else
+            {
+                await spotify.Player.SkipPrevious();
+            }
+        }
+
+        public async Task NextTrackAsync()
+        {
+            // check for or refresh access token
+            await CheckToken();
+
+            // create client
+            var spotify = new SpotifyClient(_accessToken);
+
+            var devices = await spotify.Player.GetAvailableDevices();
+            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
+
+            if (deviceId == null)
+            {
+                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
+                Console.WriteLine("Showing available devices: ");
+                for (var i = 0; i < devices.Devices.Count; i++)
+                {
+                    var device = devices.Devices[i];
+                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
+                }
+                Console.WriteLine("End of list.");
+            }
+            else
+            {
+                await spotify.Player.SkipNext();
+            }
+        }
+
+        public async Task StopAsync()
+        {
+            await PauseAsync();
         }
 
         private static async Task<SpotifyTokenResponse?> RefreshTokenAsync(string clientId, string refreshToken)
