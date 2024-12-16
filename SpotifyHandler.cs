@@ -63,6 +63,18 @@ namespace MusicDimension
             var devices = await spotify.Player.GetAvailableDevices();
             var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
 
+            if (deviceId == null)
+            {
+                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
+                Console.WriteLine("Showing available devices: ");
+                for (var i = 0; i < devices.Devices.Count; i++)
+                {
+                    var device = devices.Devices[i];
+                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
+                }
+                Console.WriteLine("End of list.");
+            }
+
             await spotify.Player.PausePlayback();
         }
 
@@ -112,7 +124,6 @@ namespace MusicDimension
             var tokens = JsonFileHandler.ReadObjectFromJsonFile<LastKnownTokens>(config.TokenFileName);
 
             // refresh else new connect
-            // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
             if (tokens != null)
             {
                 _accessToken = tokens.AccessToken;

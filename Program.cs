@@ -1,7 +1,7 @@
-﻿using LegoTagEventArgs = LegoDimensions.LegoTagEventArgs;
-
-namespace MusicDimension
+﻿namespace MusicDimension
 {
+    using LegoTagEventArgs = LegoDimensions.LegoTagEventArgs;
+
     internal static class Program
     {
         private static readonly string MusicFileName = Path.Combine($"{Environment.CurrentDirectory}", "config", "music.json");
@@ -20,11 +20,15 @@ namespace MusicDimension
             if (!CheckFiles()) return;
 
             // read general config from file
+#pragma warning disable CS8601 // Possible null reference assignment.
             _config = JsonFileHandler.ReadObjectFromJsonFile<Config>(ConfigFileName);
-            if(_config == null) return;
+#pragma warning restore CS8601 // Possible null reference assignment.
+            if (_config == null) return;
             _config.TokenFileName = TokenFileName;
 
-            Console.WriteLine($"clientid {_config.ClientId[..3]}****\nclientsecret {_config.ClientSecret[..3]}****");
+            // TODO: remove
+            if (!string.IsNullOrWhiteSpace(_config.ClientId)) { Console.WriteLine("ClientId found!"); }
+            if (!string.IsNullOrWhiteSpace(_config.ClientSecret)) { Console.WriteLine("ClientSecret found!"); }
 
             // read music config from file
             _musicConfig = JsonFileHandler.ReadObjectFromJsonFile<MusicConfig>(MusicFileName) ?? new MusicConfig();

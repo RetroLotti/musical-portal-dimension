@@ -26,8 +26,16 @@ namespace MusicDimension
                 return;
             }
 
-            Portal.SetColor(Pad.Center, Color.Green);
+            Portal.SetColor(Pad.Left, Color.Green);
+            Thread.Sleep(500);
             Portal.SetColor(Pad.Left, Color.Black);
+            Thread.Sleep(500);
+            Portal.SetColor(Pad.Center, Color.Green);
+            Thread.Sleep(500);
+            Portal.SetColor(Pad.Center, Color.Black);
+            Thread.Sleep(500);
+            Portal.SetColor(Pad.Right, Color.Green);
+            Thread.Sleep(500);
             Portal.SetColor(Pad.Right, Color.Black);
 
             IsConnected = true;
