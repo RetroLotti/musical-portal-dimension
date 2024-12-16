@@ -89,7 +89,7 @@
 
             // play first song in the list for now
             // TODO: implement more things like album and playlist etc.
-            await _spotifyHandler.PlayAsync($"{songs[0].Type}:{songs[0].SpotifyType}:{songs[0].SpotifyId}");
+            await _spotifyHandler.PlayAsync($"{songs[0].Type.ToString().ToLower()}:{songs[0].SpotifyType.ToString().ToLower()}:{songs[0].SpotifyId}");
         }
 
         private static List<Song> GetMusic(string tagUid)
