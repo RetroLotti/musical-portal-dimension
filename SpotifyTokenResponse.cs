@@ -16,6 +16,9 @@
         [JsonProperty("scope")]
         public string Scope { get; set; }
 
+        [JsonProperty("refresh_token")]
+        public string RefreshToken { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public bool IsExpired => this.CreatedAt.AddSeconds((double)this.ExpiresIn) <= DateTime.UtcNow;

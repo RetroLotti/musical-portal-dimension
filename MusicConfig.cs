@@ -9,5 +9,9 @@
 
         [JsonProperty("registeredTags")] 
         public List<Tag> RegisteredTags { get; set; } = [];
+
+        // TODO: this is not implemented yet
+        [JsonProperty("shortTags")]
+        public Dictionary<string, string> ShortTags { get; set; } = [];
     }
 }

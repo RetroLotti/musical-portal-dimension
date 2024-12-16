@@ -142,6 +142,11 @@
                         _expiresIn = newToken.ExpiresIn;
                         _createdAt = newToken.CreatedAt;
 
+                        if (!string.IsNullOrWhiteSpace(newToken.RefreshToken))
+                        {
+                            _refreshToken = newToken.RefreshToken;
+                        }
+
                         await SaveTokenAsync();
                     }
                     else

@@ -14,7 +14,7 @@
         private static Config _config = null!;
         private static MusicConfig _musicConfig = null!;
 
-        private static void Main(string[] args)
+        private static async Task Main(string[] args)
         {
             // check for config files
             if (!CheckFiles()) return;
@@ -22,17 +22,21 @@
             // read general config from file
 #pragma warning disable CS8601 // Possible null reference assignment.
             _config = JsonFileHandler.ReadObjectFromJsonFile<Config>(ConfigFileName);
+            Console.WriteLine($"Object read from {ConfigFileName}");
 #pragma warning restore CS8601 // Possible null reference assignment.
             if (_config == null) return;
             _config.TokenFileName = TokenFileName;
 
             // read music config from file
             _musicConfig = JsonFileHandler.ReadObjectFromJsonFile<MusicConfig>(MusicFileName) ?? new MusicConfig();
+            Console.WriteLine($"Object read from {MusicFileName}");
 
             // init handler
             Console.WriteLine("Initializing LEGO Dimensions Portal...");
             _portalHandler = new PortalHandler();
             _spotifyHandler = new SpotifyHandler(_config);
+
+            await _spotifyHandler.PlayAsync("spotify:track:63y2aL2dT6zzw8FOSLaNrp");
 
             // try to connect/identify the portal
             _portalHandler.Connect();
@@ -50,9 +54,20 @@
 
             Console.WriteLine("Portal is now open!");
             Console.WriteLine("Press any key to close it.");
-            while (!Console.KeyAvailable)
+
+            if (Environment.UserInteractive)
             {
-                Thread.Sleep(1000);
+                while (!Console.KeyAvailable)
+                {
+                    Thread.Sleep(1000);
+                }
+            }
+            else
+            {
+                while (true)
+                {
+                    Thread.Sleep(1000);
+                }
             }
 
             _portalHandler.Disconnect();
@@ -73,7 +88,8 @@
         {
             if (!e.Present)
             {
-                await _spotifyHandler.StopAsync(); 
+                await _spotifyHandler.StopAsync();
+                Console.WriteLine("Playback stopped!");
                 return;
             }
 
@@ -90,6 +106,7 @@
             // play first song in the list for now
             // TODO: implement more things like album and playlist etc.
             await _spotifyHandler.PlayAsync($"{songs[0].Type.ToString().ToLower()}:{songs[0].SpotifyType.ToString().ToLower()}:{songs[0].SpotifyId}");
+            Console.WriteLine($"Now playing: {songs[0].Name}");
         }
 
         private static List<Song> GetMusic(string tagUid)

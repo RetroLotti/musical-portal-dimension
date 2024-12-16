@@ -16,6 +16,10 @@
     { "uid": "04-7A-B7-2A-F6-48-81", "name": "Empty Vehicle Tag" },
     { "uid": "04-3C-82-12-5B-49-80", "name": "T.A.R.D.I.S." }
   ],
+  "shortTags": [
+    { "04-27-C1-9A-F0-4A-81": "spotify:track:63y2aL2dT6zzw8FOSLaNrp" },
+    { "04-64-63-5A-9A-40-80": "spotify:track:6zW80jVqLtgSF1yCtGHiiD" }
+  ],
   "registeredTags": [
     {
       "uid": "04-27-C1-9A-F0-4A-81",

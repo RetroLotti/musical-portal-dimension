@@ -38,7 +38,7 @@
 
                 var jsonString = File.ReadAllText(filePath);
                 var deserializedObject = JsonConvert.DeserializeObject<T>(jsonString, Settings);
-                Console.WriteLine($"Object read from {filePath}");
+                
                 return deserializedObject;
             }
             catch (Exception ex)
