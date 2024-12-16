@@ -1,11 +1,11 @@
-﻿using Newtonsoft.Json;
-using SpotifyAPI.Web;
-using System.Diagnostics;
-using System.Net;
-using System.Text;
-
-namespace MusicDimension
+﻿namespace MusicDimension
 {
+    using Newtonsoft.Json;
+    using SpotifyAPI.Web;
+    using System.Diagnostics;
+    using System.Net;
+    using System.Text;
+
     public class SpotifyHandler(Config config)
     {
         private const string SpotifyTokenUrl = "https://accounts.spotify.com/api/token";
@@ -74,8 +74,10 @@ namespace MusicDimension
                 }
                 Console.WriteLine("End of list.");
             }
-
-            await spotify.Player.PausePlayback();
+            else
+            {
+                await spotify.Player.PausePlayback();
+            }
         }
 
         private static async Task<SpotifyTokenResponse?> RefreshTokenAsync(string clientId, string refreshToken)

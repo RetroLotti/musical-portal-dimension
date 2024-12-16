@@ -1,8 +1,8 @@
-﻿using LegoDimensions;
-using LegoDimensions.Portal;
-
-namespace MusicDimension
+﻿namespace MusicDimension
 {
+    using LegoDimensions;
+    using LegoDimensions.Portal;
+
     public class PortalHandler
     {
         public LegoPortal? Portal { get; private set; }

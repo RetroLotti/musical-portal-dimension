@@ -1,8 +1,7 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
-
-namespace MusicDimension
+﻿namespace MusicDimension
 {
+    using Newtonsoft.Json;
+
     public class LastKnownTokens
     {
         [JsonProperty("accessToken")]

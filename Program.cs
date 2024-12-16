@@ -26,21 +26,18 @@
             if (_config == null) return;
             _config.TokenFileName = TokenFileName;
 
-            // TODO: remove
-            if (!string.IsNullOrWhiteSpace(_config.ClientId)) { Console.WriteLine("ClientId found!"); }
-            if (!string.IsNullOrWhiteSpace(_config.ClientSecret)) { Console.WriteLine("ClientSecret found!"); }
-
             // read music config from file
             _musicConfig = JsonFileHandler.ReadObjectFromJsonFile<MusicConfig>(MusicFileName) ?? new MusicConfig();
 
             // init handler
+            Console.WriteLine("Initializing LEGO Dimensions Portal...");
             _portalHandler = new PortalHandler();
             _spotifyHandler = new SpotifyHandler(_config);
 
             // try to connect/identify the portal
             _portalHandler.Connect();
 
-            // check if connection was successful
+            // check if connection was not successful
             if (!_portalHandler.IsConnected)
             {
                 Console.WriteLine("Press any key to exit");
@@ -51,7 +48,8 @@
             // add event to react on placing an nfc tag on any pad
             _portalHandler.Portal!.LegoTagEvent += PortalOnLegoTagEvent;
 
-            Console.WriteLine("Press any key to exit");
+            Console.WriteLine("Portal is now open!");
+            Console.WriteLine("Press any key to close it.");
             while (!Console.KeyAvailable)
             {
                 Thread.Sleep(1000);
@@ -79,18 +77,19 @@
                 return;
             }
 
-            Console.WriteLine($"Tag is present: {e.Present} - UID: {BitConverter.ToString(e.CardUid)}");
-            Console.WriteLine($"Tag is a {e.LegoTag?.GetType().Name} - Name= {e.LegoTag?.Name}");
+            var uid = BitConverter.ToString(e.CardUid);
+
+            Console.WriteLine($"{uid} | {e.LegoTag?.GetType().Name} | {e.LegoTag?.Name}");
 
             // if tag is read => play associated song / album
-            var songs = GetMusic(BitConverter.ToString(e.CardUid));
+            var songs = GetMusic(uid);
 
-            Console.WriteLine($"{songs.Count} song(s) found.");
+            // quit if no songs are configured
+            if (songs.Count == 0) { Console.WriteLine($"No song configured for uid {uid}!"); return;}
 
-            if (songs.Count > 0)
-            {
-                await _spotifyHandler.PlayAsync("spotify:track:63y2aL2dT6zzw8FOSLaNrp");
-            }
+            // play first song in the list for now
+            // TODO: implement more things like album and playlist etc.
+            await _spotifyHandler.PlayAsync($"{songs[0].Type}:{songs[0].SpotifyType}:{songs[0].SpotifyId}");
         }
 
         private static List<Song> GetMusic(string tagUid)

@@ -1,7 +1,7 @@
-﻿using Newtonsoft.Json;
-
-namespace MusicDimension
+﻿namespace MusicDimension
 {
+    using Newtonsoft.Json;
+
     public class Config
     {
         [JsonProperty("clientId")] 
