@@ -36,8 +36,6 @@
             _portalHandler = new PortalHandler();
             _spotifyHandler = new SpotifyHandler(_config);
 
-            await _spotifyHandler.PlayAsync("spotify:track:63y2aL2dT6zzw8FOSLaNrp");
-
             // try to connect/identify the portal
             _portalHandler.Connect();
 
@@ -57,19 +55,14 @@
 
             if (Environment.UserInteractive)
             {
-                while (!Console.KeyAvailable)
-                {
-                    Thread.Sleep(1000);
-                }
+                while (!Console.KeyAvailable) { Thread.Sleep(1000); }
             }
             else
             {
-                while (true)
-                {
-                    Thread.Sleep(1000);
-                }
+                while (true) { Thread.Sleep(1000); }
             }
 
+            // set to disconnected
             _portalHandler.Disconnect();
         }
 
@@ -103,9 +96,8 @@
             // quit if no songs are configured
             if (songs.Count == 0) { Console.WriteLine($"No song configured for uid {uid}!"); return;}
 
-            // play first song in the list for now
-            // TODO: implement more things like album and playlist etc.
-            await _spotifyHandler.PlayAsync($"{songs[0].Type.ToString().ToLower()}:{songs[0].SpotifyType.ToString().ToLower()}:{songs[0].SpotifyId}");
+            // play first song in the list for now (or the album or playlist)
+            await _spotifyHandler.PlayAsync(songs[0].SpotifyType.ToString().ToLower(), songs[0].SpotifyId);
             Console.WriteLine($"Now playing: {songs[0].Name}");
         }
 

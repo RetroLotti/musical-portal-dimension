@@ -16,7 +16,7 @@
         private int _expiresIn;
         private DateTime _createdAt;
 
-        public async Task PlayAsync(string uri)
+        public async Task PlayAsync(string spotifyType, string spotifyId)
         {
             // check for or refresh access token
             await CheckToken();
@@ -39,16 +39,24 @@
                 Console.WriteLine("End of list.");
             }
 
-            // actually play an album or song
-            // TODO: save position of current track before changing the song or resume from saved position
-            var playbackRequest = new PlayerResumePlaybackRequest
-            {
-                // TODO: extend so that more can be given than only one track
-                //ContextUri = searchResult.Albums.Items[9].Uri, // for an album
-                Uris = new List<string> { uri },                  // for a sinlge song or track from contexturi album
-                DeviceId = deviceId
-            };
+            var uri = $"spotify:{spotifyType}:{spotifyId}";
+            var playbackRequest = new PlayerResumePlaybackRequest { DeviceId = deviceId };
 
+            switch (spotifyType)
+            {
+                case "album":
+                case "playlist":
+                    playbackRequest.ContextUri = uri;
+                    break;
+                default:
+                    playbackRequest.Uris = new List<string> { uri };
+                    break;
+            }
+
+            // TODO: save position of current track before changing the song or resume from saved position (if possible)
+            // 
+
+            // actually play an album or song
             await spotify.Player.ResumePlayback(playbackRequest);
         }
 
