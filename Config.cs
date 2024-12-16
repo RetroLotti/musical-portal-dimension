@@ -14,5 +14,11 @@
         public string SpotifyDeviceName { get; set; } = null!;
 
         public string TokenFileName { get; set; } = null!;
+
+        public string PausePlayback { get; set; } = null!;
+
+        public string NextTrack { get; set; } = null!;
+
+        public string PreviousTrack { get; set; } = null!;
     }
 }
