@@ -1,4 +1,4 @@
-﻿namespace MusicDimension
+﻿namespace MusicDimension.misc
 {
     using LegoDimensions;
     using LegoDimensions.Portal;

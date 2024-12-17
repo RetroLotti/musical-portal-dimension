@@ -1,5 +1,7 @@
 ﻿namespace MusicDimension
 {
+    using misc;
+    using models;
     using LegoTagEventArgs = LegoDimensions.LegoTagEventArgs;
 
     internal static class Program

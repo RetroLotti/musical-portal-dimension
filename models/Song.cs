@@ -1,10 +1,10 @@
-﻿namespace MusicDimension
+﻿namespace MusicDimension.models
 {
     using Newtonsoft.Json;
 
     public class Song
     {
-        [JsonProperty("name")] 
+        [JsonProperty("name")]
         public string Name { get; set; } = null!;
 
         [JsonProperty("type")]

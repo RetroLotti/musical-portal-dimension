@@ -1,4 +1,4 @@
-﻿namespace MusicDimension
+﻿namespace MusicDimension.models
 {
     using Newtonsoft.Json;
 
@@ -16,6 +16,6 @@
         [JsonProperty("createdAt")]
         public DateTime CreatedAt { get; set; }
 
-        public bool IsExpired => this.CreatedAt.AddSeconds((double)this.ExpiresIn) <= DateTime.UtcNow;
+        public bool IsExpired => CreatedAt.AddSeconds(ExpiresIn) <= DateTime.UtcNow;
     }
 }

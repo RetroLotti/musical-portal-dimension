@@ -1,4 +1,4 @@
-﻿namespace MusicDimension
+﻿namespace MusicDimension.models
 {
     using Newtonsoft.Json;
 
@@ -7,7 +7,7 @@
         [JsonProperty("unusedTags")]
         public List<Tag> UnusedTags { get; set; } = [];
 
-        [JsonProperty("registeredTags")] 
+        [JsonProperty("registeredTags")]
         public List<Tag> RegisteredTags { get; set; } = [];
 
         // TODO: this is not implemented yet

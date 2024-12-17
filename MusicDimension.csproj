@@ -12,6 +12,8 @@
   <ItemGroup>
     <None Remove=".gitattributes" />
     <None Remove=".gitignore" />
+    <None Remove="CODE_OF_CONDUCT.md" />
+    <None Remove="LICENSE.md" />
     <None Remove="README.md" />
     <None Remove="UNLICENSE.txt" />
   </ItemGroup>
