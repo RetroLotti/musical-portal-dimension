@@ -1,10 +1,10 @@
-﻿namespace MusicDimension
+﻿namespace MusicDimension.models
 {
     using Newtonsoft.Json;
 
     public class Config
     {
-        [JsonProperty("clientId")] 
+        [JsonProperty("clientId")]
         public string ClientId { get; set; } = null!;
 
         [JsonProperty("clientSecret")]
@@ -14,11 +14,5 @@
         public string SpotifyDeviceName { get; set; } = null!;
 
         public string TokenFileName { get; set; } = null!;
-
-        public string PausePlayback { get; set; } = null!;
-
-        public string NextTrack { get; set; } = null!;
-
-        public string PreviousTrack { get; set; } = null!;
     }
 }

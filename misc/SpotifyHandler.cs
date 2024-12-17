@@ -1,5 +1,6 @@
-﻿namespace MusicDimension
+﻿namespace MusicDimension.misc
 {
+    using MusicDimension.models;
     using Newtonsoft.Json;
     using SpotifyAPI.Web;
     using System.Diagnostics;
@@ -9,12 +10,19 @@
     public class SpotifyHandler(Config config)
     {
         private const string SpotifyTokenUrl = "https://accounts.spotify.com/api/token";
-        private const string RedirectUri = "http://localhost:8888/callback"; 
+        private const string RedirectUri = "http://localhost:8888/callback";
 
         private string _accessToken = string.Empty;
         private string _refreshToken = string.Empty;
         private int _expiresIn;
         private DateTime _createdAt;
+
+        public static async Task<SpotifyHandler> CreateAsync(Config config)
+        {
+            var instance = new SpotifyHandler(config);
+            await instance.CheckToken();
+            return instance;
+        }
 
         public async Task PlayAsync(string spotifyType, string spotifyId)
         {
@@ -60,7 +68,18 @@
             await spotify.Player.ResumePlayback(playbackRequest);
         }
 
-        public async Task StopAsync()
+        public async Task WhateverAsync()
+        {
+            // check for or refresh access token
+            await CheckToken();
+
+            // create client
+            var spotify = new SpotifyClient(_accessToken);
+
+            //spotify.Player.GetCurrentlyPlaying()
+        }
+
+        public async Task PauseAsync()
         {
             // check for or refresh access token
             await CheckToken();
@@ -86,6 +105,67 @@
             {
                 await spotify.Player.PausePlayback();
             }
+        }
+
+        public async Task PreviousTrackAsync()
+        {
+            // check for or refresh access token
+            await CheckToken();
+
+            // create client
+            var spotify = new SpotifyClient(_accessToken);
+
+            var devices = await spotify.Player.GetAvailableDevices();
+            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
+
+            if (deviceId == null)
+            {
+                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
+                Console.WriteLine("Showing available devices: ");
+                for (var i = 0; i < devices.Devices.Count; i++)
+                {
+                    var device = devices.Devices[i];
+                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
+                }
+                Console.WriteLine("End of list.");
+            }
+            else
+            {
+                await spotify.Player.SkipPrevious();
+            }
+        }
+
+        public async Task NextTrackAsync()
+        {
+            // check for or refresh access token
+            await CheckToken();
+
+            // create client
+            var spotify = new SpotifyClient(_accessToken);
+
+            var devices = await spotify.Player.GetAvailableDevices();
+            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
+
+            if (deviceId == null)
+            {
+                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
+                Console.WriteLine("Showing available devices: ");
+                for (var i = 0; i < devices.Devices.Count; i++)
+                {
+                    var device = devices.Devices[i];
+                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
+                }
+                Console.WriteLine("End of list.");
+            }
+            else
+            {
+                await spotify.Player.SkipNext();
+            }
+        }
+
+        public async Task StopAsync()
+        {
+            await PauseAsync();
         }
 
         private static async Task<SpotifyTokenResponse?> RefreshTokenAsync(string clientId, string refreshToken)
@@ -203,7 +283,7 @@
                 await SaveTokenAsync();
             }
         }
-        
+
         // Funktion zum Code-Verifier-Generieren
         private static string GenerateCodeVerifier()
         {

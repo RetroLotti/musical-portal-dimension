@@ -1,19 +1,27 @@
 {
-  "validSourceTypes": ["spotify", "local", "other"],
-  "unusedTags": [
-    { "uid": "", "name": "" },
-    { "uid": "04-06-BC-7A-5C-49-81", "name": "The Doctor" },
-    { "uid": "04-A2-81-0A-B4-43-80", "name": "Scooby Doo" },
-    { "uid": "04-71-8A-A2-13-43-80", "name": "Shaggy" },
-    { "uid": "04-20-B4-C2-6D-40-81", "name": "Wyldstyle" },
-    { "uid": "04-36-EC-62-19-4A-81", "name": "Empty Vehicle Tag" },
-    { "uid": "04-AA-86-12-5B-49-80", "name": "K9" },
-    { "uid": "04-F8-63-1A-A8-48-80", "name": "Mystery Machine" },
-    { "uid": "04-78-86-A2-B9-3F-80", "name": "Empty Vehicle Tag" },
-    { "uid": "04-8A-59-02-5B-49-80", "name": "Scooby Snack" },
-    { "uid": "04-43-35-92-75-40-81", "name": "Batmobile" },
-    { "uid": "04-3C-82-12-5B-49-80", "name": "T.A.R.D.I.S." }
-  ],
+  "validSourceTypes": [ "spotify", "local", "other" ],
+  "validSpotifyTypes":  [ "album", "track", "playlist" ],
+  "validControlTypes": [ "stop", "pause", "play", "next", "previous", "repeat", "shuffle", "volumneup", "volumnedown" ],
+  /* set these to you liking */
+  "controlTags": {
+    "00-00-00-00-00-00-00": "pause",
+    "00-00-00-00-00-00-01": "next"
+  },
+  /* to be implemented / just a reference for myself */
+  "unusedTags": {
+    "04-06-BC-7A-5C-49-81": "The Doctor",
+    "04-A2-81-0A-B4-43-80": "Scooby Doo",
+    "04-71-8A-A2-13-43-80": "Shaggy",
+    "04-20-B4-C2-6D-40-81": "Wyldstyle",
+    "04-36-EC-62-19-4A-81": "Empty Vehicle Tag",
+    "04-AA-86-12-5B-49-80": "K9",
+    "04-F8-63-1A-A8-48-80": "Mystery Machine",
+    "04-78-86-A2-B9-3F-80": "Empty Vehicle Tag",
+    "04-8A-59-02-5B-49-80": "Scooby Snack",
+    "04-43-35-92-75-40-81": "Batmobile",
+    "04-3C-82-12-5B-49-80": "T.A.R.D.I.S."
+  },
+  /* to be implemented */
   "shortTags": {
     "04-27-C1-9A-F0-4A-81": "spotify:track:63y2aL2dT6zzw8FOSLaNrp",
     "04-64-63-5A-9A-40-80": "spotify:track:6zW80jVqLtgSF1yCtGHiiD",
@@ -76,7 +84,7 @@
         {
           "name": "Just some Music (ogg)",
           "type": "local",
-          "path": "something.ogg", 
+          "path": "media#rick.ogg",
           "spotifyType": "",
           "spotifyId": ""
         }

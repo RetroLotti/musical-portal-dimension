@@ -1,5 +1,7 @@
 ﻿namespace MusicDimension
 {
+    using misc;
+    using models;
     using LegoTagEventArgs = LegoDimensions.LegoTagEventArgs;
 
     internal static class Program
@@ -10,11 +12,12 @@
 
         private static PortalHandler _portalHandler = null!;
         private static SpotifyHandler _spotifyHandler = null!;
+        private static LocalMusicHandler _localMusicHandler = null!;
 
         private static Config _config = null!;
         private static MusicConfig _musicConfig = null!;
 
-        private static void Main(string[] args)
+        private static async Task Main(string[] _)
         {
             // check for config files
             if (!CheckFiles()) return;
@@ -31,10 +34,16 @@
             _musicConfig = JsonFileHandler.ReadObjectFromJsonFile<MusicConfig>(MusicFileName) ?? new MusicConfig();
             Console.WriteLine($"Object read from {MusicFileName}");
 
+            //_localMusicHandler = new LocalMusicHandler();
+            //_localMusicHandler.Play(Path.Combine($"{Environment.CurrentDirectory}", "media", "rick.ogg"));
+
             // init handler
             Console.WriteLine("Initializing LEGO Dimensions Portal...");
             _portalHandler = new PortalHandler();
-            _spotifyHandler = new SpotifyHandler(_config);
+            Console.WriteLine("Initializing Spotify...");
+            _spotifyHandler = await SpotifyHandler.CreateAsync(_config);
+            Console.WriteLine("Initializing VLC library...");
+            _localMusicHandler = new LocalMusicHandler();
 
             // try to connect/identify the portal
             _portalHandler.Connect();
@@ -55,10 +64,12 @@
 
             if (Environment.UserInteractive)
             {
+                // loop for terminal sessions
                 while (!Console.KeyAvailable) { Thread.Sleep(1000); }
             }
             else
             {
+                // loop for running as a daemon 
                 while (true) { Thread.Sleep(1000); }
             }
 
@@ -93,16 +104,53 @@
 
             Console.WriteLine($"{uid} | {e.LegoTag?.GetType().Name} | {e.LegoTag?.Name}");
 
+            // check if tag is control tag
+            if (_musicConfig.ControlTags.TryGetValue(uid, out var value))
+            {
+                switch (value)
+                {
+                    
+                    case "next":
+                        await _spotifyHandler.NextTrackAsync();
+                        break;
+                    case "previous":
+                        await _spotifyHandler.PreviousTrackAsync();
+                        break;
+                    default:
+                        await _spotifyHandler.PauseAsync();
+                        break;
+                }
+            }
+
             // if tag is read => play associated song / album
             var songs = GetMusic(uid);
 
             // quit if no songs are configured
             if (songs.Count == 0) { Console.WriteLine($"No song configured for uid {uid}!"); return;}
+            var song = songs[0];
 
-            // play first song in the list for now (or the album or playlist)
-            await _spotifyHandler.PlayAsync(songs[0].SpotifyType.ToString().ToLower(), songs[0].SpotifyId);
-            _portalHandler.IsTransferring = true;
-            Console.WriteLine($"Now playing: {songs[0].Name}");
+            // TODO: get current player info - if current song or album are the same as the requested one the playback should not be reset
+
+            switch (song.Type)
+            {
+                case SourceTypes.Spotify:
+                    // play first song in the list for now (or the album or playlist)
+                    await _spotifyHandler.PlayAsync(song.SpotifyType.ToString()!.ToLower(), song.SpotifyId!);
+                    _portalHandler.IsTransferring = true;
+                    Console.WriteLine($"Now playing: {song.Name}");
+                    break;
+                case SourceTypes.Local:
+                    _localMusicHandler.Play(song.Name ?? Path.Combine($"{Environment.CurrentDirectory}", "media", "rick.ogg"));
+                    _portalHandler.IsTransferring = true;
+                    Console.WriteLine($"Now playing: {song.Name}");
+                    break;
+                case SourceTypes.Other:
+                    Console.WriteLine("This source type is not handled yet.");
+                    break;
+                default:
+                    Console.WriteLine("Given source type does not exist.");
+                    break;
+            }
         }
 
         private static List<Song> GetMusic(string tagUid)

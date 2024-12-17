@@ -1,4 +1,4 @@
-﻿namespace MusicDimension
+﻿namespace MusicDimension.misc
 {
     using LegoDimensions;
     using LegoDimensions.Portal;
@@ -28,19 +28,19 @@
                 return;
             }
 
-            Portal.SetColor(Pad.Center, Color.Red);
+            Portal.SetColor(Pad.All, Color.Red);
             Thread.Sleep(100);
-            Portal.SetColor(Pad.Center, Color.OrangeRed);
+            Portal.SetColor(Pad.All, Color.OrangeRed);
             Thread.Sleep(100);
-            Portal.SetColor(Pad.Center, Color.Orange);
+            Portal.SetColor(Pad.All, Color.Orange);
             Thread.Sleep(100);
-            Portal.SetColor(Pad.Center, Color.Yellow);
+            Portal.SetColor(Pad.All, Color.Yellow);
             Thread.Sleep(100);
-            Portal.SetColor(Pad.Center, Color.YellowGreen);
+            Portal.SetColor(Pad.All, Color.YellowGreen);
             Thread.Sleep(100);
-            Portal.SetColor(Pad.Center, Color.Green);
+            Portal.SetColor(Pad.All, Color.Green);
             Thread.Sleep(100);
-            Portal.SetColor(Pad.Center, Color.Black);
+            Portal.SetColor(Pad.All, Color.Black);
 
             IsConnected = true;
         }

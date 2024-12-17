@@ -1,4 +1,4 @@
-﻿namespace MusicDimension
+﻿namespace MusicDimension.models
 {
     using Newtonsoft.Json;
 

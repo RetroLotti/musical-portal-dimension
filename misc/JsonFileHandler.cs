@@ -1,4 +1,4 @@
-﻿namespace MusicDimension
+﻿namespace MusicDimension.misc
 {
     using Newtonsoft.Json;
     using System;
@@ -38,7 +38,7 @@
 
                 var jsonString = File.ReadAllText(filePath);
                 var deserializedObject = JsonConvert.DeserializeObject<T>(jsonString, Settings);
-                
+
                 return deserializedObject;
             }
             catch (Exception ex)
