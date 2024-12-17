@@ -17,6 +17,13 @@
         private int _expiresIn;
         private DateTime _createdAt;
 
+        public static async Task<SpotifyHandler> CreateAsync(Config config)
+        {
+            var instance = new SpotifyHandler(config);
+            await instance.CheckToken();
+            return instance;
+        }
+
         public async Task PlayAsync(string spotifyType, string spotifyId)
         {
             // check for or refresh access token
@@ -59,6 +66,17 @@
 
             // actually play an album or song
             await spotify.Player.ResumePlayback(playbackRequest);
+        }
+
+        public async Task WhateverAsync()
+        {
+            // check for or refresh access token
+            await CheckToken();
+
+            // create client
+            var spotify = new SpotifyClient(_accessToken);
+
+            //spotify.Player.GetCurrentlyPlaying()
         }
 
         public async Task PauseAsync()

@@ -5,16 +5,16 @@
     public class Song
     {
         [JsonProperty("name")]
-        public string Name { get; set; } = null!;
+        public string? Name { get; set; }
 
         [JsonProperty("type")]
         public SourceTypes Type { get; set; }
 
         [JsonProperty("spotifyType")]
-        public SpotifyTypes SpotifyType { get; set; }
+        public SpotifyTypes? SpotifyType { get; set; }
 
         [JsonProperty("spotifyId")]
-        public string SpotifyId { get; set; } = null!;
+        public string? SpotifyId { get; set; }
     }
 
     public enum SpotifyTypes

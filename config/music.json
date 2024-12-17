@@ -1,6 +1,7 @@
 {
   "validSourceTypes": [ "spotify", "local", "other" ],
-  "validControlTypes": [ "stop", "pause", "next", "previous", "repeat", "shuffle" ],
+  "validSpotifyTypes":  [ "album", "track", "playlist" ],
+  "validControlTypes": [ "stop", "pause", "play", "next", "previous", "repeat", "shuffle", "volumneup", "volumnedown" ],
   /* set these to you liking */
   "controlTags": {
     "00-00-00-00-00-00-00": "pause",
@@ -83,7 +84,7 @@
         {
           "name": "Just some Music (ogg)",
           "type": "local",
-          "path": "something.ogg",
+          "path": "media#rick.ogg",
           "spotifyType": "",
           "spotifyId": ""
         }
