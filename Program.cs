@@ -16,7 +16,7 @@
         private static Config _config = null!;
         private static MusicConfig _musicConfig = null!;
 
-        private static void Main(string[] args)
+        private static void Main(string[] _)
         {
             // check for config files
             if (!CheckFiles()) return;
@@ -57,10 +57,12 @@
 
             if (Environment.UserInteractive)
             {
+                // loop for terminal sessions
                 while (!Console.KeyAvailable) { Thread.Sleep(1000); }
             }
             else
             {
+                // loop for running as a daemon 
                 while (true) { Thread.Sleep(1000); }
             }
 
