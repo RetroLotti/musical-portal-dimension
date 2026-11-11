@@ -5,10 +5,10 @@
     public class LastKnownTokens
     {
         [JsonProperty("accessToken")]
-        public string AccessToken { get; set; }
+        public string AccessToken { get; set; } = string.Empty;
 
         [JsonProperty("refreshToken")]
-        public string RefreshToken { get; set; }
+        public string RefreshToken { get; set; } = string.Empty;
 
         [JsonProperty("expiresIn")]
         public int ExpiresIn { get; set; }
