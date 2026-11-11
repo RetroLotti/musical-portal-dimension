@@ -10,7 +10,7 @@
     public class SpotifyHandler(Config config)
     {
         private const string SpotifyTokenUrl = "https://accounts.spotify.com/api/token";
-        private const string RedirectUri = "http://localhost:8888/callback";
+        private const string RedirectUri = "http://127.0.0.1:8888/callback";
 
         private string _accessToken = string.Empty;
         private string _refreshToken = string.Empty;

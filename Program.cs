@@ -40,8 +40,15 @@
             // init handler
             Console.WriteLine("Initializing LEGO Dimensions Portal...");
             _portalHandler = new PortalHandler();
-            Console.WriteLine("Initializing Spotify...");
-            _spotifyHandler = await SpotifyHandler.CreateAsync(_config);
+            if (_config.Enable)
+            {
+                Console.WriteLine("Initializing Spotify...");
+                _spotifyHandler = await SpotifyHandler.CreateAsync(_config);
+            }
+            else
+            {
+                Console.WriteLine("Spotify is disabled. Local file playback only.");
+            }
             Console.WriteLine("Initializing VLC library...");
             _localMusicHandler = new LocalMusicHandler();
 
@@ -95,7 +102,14 @@
                 if (!_portalHandler.IsTransferring) return;
 
                 _portalHandler.IsTransferring = false;
-                await _spotifyHandler.StopAsync();
+                if (_config.Enable)
+                {
+                    await _spotifyHandler.StopAsync();
+                }
+                else
+                {
+                    _localMusicHandler.Stop();
+                }
                 Console.WriteLine("Playback stopped!");
                 return;
             }
@@ -105,7 +119,7 @@
             Console.WriteLine($"{uid} | {e.LegoTag?.GetType().Name} | {e.LegoTag?.Name}");
 
             // check if tag is control tag
-            if (_musicConfig.ControlTags.TryGetValue(uid, out var value))
+            if (_config.Enable && _musicConfig.ControlTags.TryGetValue(uid, out var value))
             {
                 switch (value)
                 {
@@ -134,6 +148,12 @@
             switch (song.Type)
             {
                 case SourceTypes.Spotify:
+                    if (!_config.Enable)
+                    {
+                        Console.WriteLine("Spotify is disabled; this tag cannot be played.");
+                        break;
+                    }
+
                     // play first song in the list for now (or the album or playlist)
                     await _spotifyHandler.PlayAsync(song.SpotifyType.ToString()!.ToLower(), song.SpotifyId!);
                     _portalHandler.IsTransferring = true;

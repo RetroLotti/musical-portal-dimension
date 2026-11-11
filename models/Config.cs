@@ -4,6 +4,9 @@
 
     public class Config
     {
+        [JsonProperty("enable")]
+        public bool Enable { get; set; } = true;
+
         [JsonProperty("clientId")]
         public string ClientId { get; set; } = null!;
 
