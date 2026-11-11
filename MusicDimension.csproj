@@ -35,7 +35,7 @@
     <None Update="config\music.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="media\rick.ogg">
+    <None Update="media\**\*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

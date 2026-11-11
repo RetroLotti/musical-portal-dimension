@@ -160,7 +160,21 @@
                     Console.WriteLine($"Now playing: {song.Name}");
                     break;
                 case SourceTypes.Local:
-                    _localMusicHandler.Play(song.Name ?? Path.Combine($"{Environment.CurrentDirectory}", "media", "rick.ogg"));
+                    var localPath = song.Path?.Replace('#', Path.DirectorySeparatorChar);
+                    if (string.IsNullOrWhiteSpace(localPath))
+                    {
+                        Console.WriteLine($"No local media path configured for {song.Name}.");
+                        break;
+                    }
+
+                    var resolvedLocalPath = Path.GetFullPath(localPath);
+                    if (!File.Exists(resolvedLocalPath))
+                    {
+                        Console.WriteLine($"Local media file not found: {resolvedLocalPath}");
+                        break;
+                    }
+
+                    _localMusicHandler.Play(resolvedLocalPath);
                     _portalHandler.IsTransferring = true;
                     Console.WriteLine($"Now playing: {song.Name}");
                     break;

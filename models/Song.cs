@@ -10,6 +10,9 @@
         [JsonProperty("type")]
         public SourceTypes Type { get; set; }
 
+        [JsonProperty("path")]
+        public string? Path { get; set; }
+
         [JsonProperty("spotifyType")]
         public SpotifyTypes? SpotifyType { get; set; }
 
