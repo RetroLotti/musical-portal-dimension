@@ -79,7 +79,26 @@ The systemd service selects VLC's ALSA output directly so it does not depend on 
 
 The LEGO Dimensions Toy Pad rule uses vendor/product `0e6f:0241` and grants access to the `plugdev` group. Replug the portal or reboot after installing it. This rule follows the identifier documented by the [LegoDimensions Linux driver instructions](https://github.com/Ellerbach/LegoDimensions/blob/main/linux-driver-rules/99-lego-dimensions.rules).
 
-For Spotify, complete the first OAuth login interactively before enabling the system service, then keep the generated `config/tokens.json`. A headless systemd service cannot open the browser for the initial login. Set `enable` to `false` for local-only playback. Keep `config/config.json`, `config/music.json`, `config/tokens.json`, and `media/` when updating the published binaries.
+### Spotify Settings And Login
+
+The web manager's **Spotify settings** section edits `enable`, `spotifyDeviceName`, `clientId`, and `clientSecret` in `config/config.json`. Saved changes apply immediately without restarting, including enabling Spotify after a local-only startup. Disabling prevents further Spotify playback/control requests; it does not shut down librespot. The secret is never returned to the browser: leave the field blank to keep it, or select **Clear saved client secret** to remove it. This application uses PKCE, so the client secret is not needed for login or token refresh. The token file location is internal and is not web-editable. These settings are available to everyone who can reach the unauthenticated web manager; use only a trusted LAN or an SSH tunnel.
+
+Complete the first OAuth login interactively with `./MusicDimension --spotify-login` (or `dotnet run -- --spotify-login` from source). Register `http://127.0.0.1:8888/callback` in the Spotify developer dashboard. The browser callback must reach the machine running this command; for a headless Pi, use an SSH tunnel for port 8888, open the printed URL on your computer, and run the command as a user who can write the Pi's config directory. Keep the generated `config/tokens.json` readable/writable by the `musicdimension` service user. Normal startup never waits for browser login, and Spotify failures do not block local playback. When changing the client ID, back up/remove the old token file and repeat login for the new app. Keep `config/config.json`, `config/music.json`, `config/tokens.json`, and `media/` when updating the published binaries.
+
+### Spotify After A Pi Reboot
+
+There are two separate logins: MusicDimension's Web API OAuth tokens and the librespot/raspotify Spotify Connect receiver's own account session. OAuth tokens do not authenticate the receiver. The application now retries device discovery briefly, explicitly transfers playback to an inactive configured device before play/resume, and targets that device for all playback controls. It never falls back to playing on your phone if the Pi is missing. Startup only checks the Web API connection; it does not take playback away from another device.
+
+If the Pi still only works after selecting it on your phone, check the receiver immediately after reboot, before opening the phone app:
+
+```sh
+systemctl status librespot
+journalctl -b -u librespot --no-pager
+systemctl cat librespot
+# If using raspotify instead, substitute raspotify for librespot above.
+```
+
+Ensure the receiver service is enabled at boot, can reach Spotify, and uses the exact device name saved in the web manager. Configure persistent authentication/cache according to your installed librespot/raspotify version, with the cache owned by its service user and available at boot. An unauthenticated receiver that only advertises through local discovery may need a phone connection before Spotify's Web API can see it; MusicDimension cannot wake or sign in such a receiver. The receiver service/cache configuration is not installed or managed by this repository. Spotify Web API playback also requires Spotify Premium and the appropriate app/account access.
 
 Cross-publishing validates the managed application and package restore for both ARM RIDs. Actual portal USB access and audio output still require a test on the Pi 3 hardware and its installed Raspberry Pi OS/VLC packages.
   

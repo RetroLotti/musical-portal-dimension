@@ -18,7 +18,7 @@ namespace MusicDimension.misc
             ".aac", ".flac", ".m4a", ".mp3", ".ogg", ".wav", ".wma", ".m3u", ".m3u8"
         };
 
-        public static WebApplication Create(MusicConfigStore store, ReaderCaptureState readerCapture, bool spotifyEnabled, Func<bool> isReaderConnected, string listenUrl)
+        public static WebApplication Create(MusicConfigStore store, ReaderCaptureState readerCapture, SpotifyHandler spotify, string configFileName, Func<bool> isReaderConnected, string listenUrl)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -36,7 +36,32 @@ namespace MusicDimension.misc
             app.UseStaticFiles();
 
             app.MapGet("/api/library", () => Results.Ok(store.Snapshot()));
-            app.MapGet("/api/status", () => Results.Ok(new { spotifyEnabled, readerConnected = isReaderConnected() }));
+            app.MapGet("/api/status", () => Results.Ok(new { spotifyEnabled = spotify.Configuration.Enable, readerConnected = isReaderConnected() }));
+            app.MapGet("/api/settings/spotify", () => Results.Ok(GetSpotifySettings(spotify)));
+            app.MapPut("/api/settings/spotify", async (UpdateSpotifySettingsRequest request) =>
+            {
+                if (request.Enable && (string.IsNullOrWhiteSpace(request.ClientId) || string.IsNullOrWhiteSpace(request.SpotifyDeviceName)))
+                    return Results.BadRequest(new { message = "Client ID and device name are required when Spotify is enabled." });
+
+                var current = spotify.Configuration;
+                var configuration = new Config
+                {
+                    Enable = request.Enable,
+                    ClientId = request.ClientId?.Trim() ?? "",
+                    ClientSecret = request.ClientSecret ?? current.ClientSecret,
+                    SpotifyDeviceName = request.SpotifyDeviceName?.Trim() ?? "",
+                    TokenFileName = current.TokenFileName
+                };
+                try
+                {
+                    await spotify.UpdateConfigurationAsync(configuration, configFileName);
+                    return Results.Ok(GetSpotifySettings(spotify));
+                }
+                catch (Exception exception)
+                {
+                    return Results.Problem($"Could not save Spotify settings: {exception.Message}");
+                }
+            });
             app.MapGet("/api/reader/capture", () => Results.Ok(readerCapture.GetSnapshot(isReaderConnected())));
             app.MapPost("/api/reader/capture", () =>
             {
@@ -49,12 +74,25 @@ namespace MusicDimension.misc
 
             app.MapGet("/api/media", () => Results.Ok(ListMediaFiles()));
             app.MapPost("/api/media", UploadMediaAsync).DisableAntiforgery();
-            app.MapPost("/api/tags", (CreateTagRequest request) => CreateTag(request, store, spotifyEnabled));
-            app.MapPut("/api/tags/{uid}", (string uid, CreateTagRequest request) => UpdateTag(uid, request, store, spotifyEnabled));
+            app.MapPost("/api/tags", (CreateTagRequest request) => CreateTag(request, store, spotify.Configuration.Enable));
+            app.MapPut("/api/tags/{uid}", (string uid, CreateTagRequest request) => UpdateTag(uid, request, store, spotify.Configuration.Enable));
             app.MapDelete("/api/tags/{uid}", (string uid) => DeleteTag(uid, store));
 
             return app;
         }
+
+        private static SpotifySettingsResponse GetSpotifySettings(SpotifyHandler spotify)
+        {
+            var configuration = spotify.Configuration;
+            return new(configuration.Enable, configuration.ClientId, configuration.SpotifyDeviceName,
+                !string.IsNullOrEmpty(configuration.ClientSecret));
+        }
+
+        /// <summary>Editable Spotify configuration; a null secret preserves its current value.</summary>
+        public sealed record UpdateSpotifySettingsRequest(bool Enable, string? ClientId, string? SpotifyDeviceName, string? ClientSecret);
+
+        /// <summary>Spotify settings without credentials or token file paths.</summary>
+        public sealed record SpotifySettingsResponse(bool Enable, string ClientId, string SpotifyDeviceName, bool HasClientSecret);
 
         private static IResult UpdateTrackControlTags(TrackControlTagsRequest request, MusicConfigStore store)
         {

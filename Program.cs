@@ -35,6 +35,12 @@
             if (_config == null) return;
             _config.TokenFileName = TokenFileName;
 
+            if (args.Contains("--spotify-login"))
+            {
+                await SpotifyHandler.CreateAsync(_config);
+                return;
+            }
+
             // read music config from file
             _musicStore = new MusicConfigStore(MusicFileName);
             Console.WriteLine($"Object read from {MusicFileName}");
@@ -45,20 +51,23 @@
             // init handler
             Console.WriteLine("Initializing LEGO Dimensions Portal...");
             _portalHandler = new PortalHandler();
+            _spotifyHandler = new SpotifyHandler(_config);
             var listenUrl = Environment.GetEnvironmentVariable("MUSICDIMENSION_WEB_URL") ?? "http://127.0.0.1:5080";
-            var app = MusicWebHost.Create(_musicStore, ReaderCapture, _config.Enable, () => _portalHandler.IsConnected, listenUrl);
+            var app = MusicWebHost.Create(_musicStore, ReaderCapture, _spotifyHandler, ConfigFileName, () => _portalHandler.IsConnected, listenUrl);
             await app.StartAsync();
             Console.WriteLine($"Music manager: {listenUrl}");
 
-            if (_config.Enable)
+            _ = Task.Run(async () =>
             {
-                Console.WriteLine("Initializing Spotify...");
-                _spotifyHandler = await SpotifyHandler.CreateAsync(_config);
-            }
-            else
-            {
-                Console.WriteLine("Spotify is disabled. Local file playback only.");
-            }
+                try
+                {
+                    await _spotifyHandler.InitializeAsync();
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine($"Spotify initialization failed; playback will retry: {exception.Message}");
+                }
+            });
             Console.WriteLine("Initializing VLC library...");
             _localMusicHandler = new LocalMusicHandler();
 
@@ -127,7 +136,7 @@
                 _portalHandler.IsTransferring = false;
                 _pausedTagUid = _currentTagUid;
                 _pausedPlaybackSource = _currentPlaybackSource;
-                if (_pausedPlaybackSource == SourceTypes.Spotify)
+                if (_pausedPlaybackSource == SourceTypes.Spotify && _spotifyHandler.Configuration.Enable)
                 {
                     await _spotifyHandler.PauseAsync();
                 }
@@ -145,6 +154,11 @@
             {
                 if (string.Equals(uid, _pausedTagUid, StringComparison.OrdinalIgnoreCase))
                 {
+                    if (_pausedPlaybackSource == SourceTypes.Spotify && !_spotifyHandler.Configuration.Enable)
+                    {
+                        Console.WriteLine("Spotify is disabled; this tag cannot be resumed.");
+                        return;
+                    }
                     if (_pausedPlaybackSource == SourceTypes.Spotify)
                     {
                         await _spotifyHandler.ResumeAsync();
@@ -205,7 +219,7 @@
             switch (song.Type)
             {
                 case SourceTypes.Spotify:
-                    if (!_config.Enable)
+                    if (!_spotifyHandler.Configuration.Enable)
                     {
                         Console.WriteLine("Spotify is disabled; this tag cannot be played.");
                         break;
@@ -255,7 +269,7 @@
 
         private static async Task SkipTrackAsync(bool forward)
         {
-            if (_currentPlaybackSource == SourceTypes.Spotify && _config.Enable)
+            if (_currentPlaybackSource == SourceTypes.Spotify && _spotifyHandler.Configuration.Enable)
             {
                 if (forward) await _spotifyHandler.NextTrackAsync();
                 else await _spotifyHandler.PreviousTrackAsync();
@@ -273,7 +287,7 @@
 
         private static async Task PausePlaybackAsync()
         {
-            if (_currentPlaybackSource == SourceTypes.Spotify && _config.Enable)
+            if (_currentPlaybackSource == SourceTypes.Spotify && _spotifyHandler.Configuration.Enable)
             {
                 await _spotifyHandler.PauseAsync();
             }
@@ -285,7 +299,7 @@
 
         private static async Task ResumePlaybackAsync()
         {
-            if (_currentPlaybackSource == SourceTypes.Spotify && _config.Enable)
+            if (_currentPlaybackSource == SourceTypes.Spotify && _spotifyHandler.Configuration.Enable)
             {
                 await _spotifyHandler.ResumeAsync();
             }

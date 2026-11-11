@@ -24,7 +24,7 @@ async function request(url, options = {}) {
   const body = response.headers.get("content-type")?.includes("application/json")
     ? await response.json()
     : null;
-  if (!response.ok) throw new Error(body?.message ?? `Request failed (${response.status})`);
+  if (!response.ok) throw new Error(body?.message ?? body?.detail ?? `Request failed (${response.status})`);
   return body;
 }
 
@@ -226,7 +226,7 @@ async function editTag(tag) {
   const songs = tag.songs ?? [];
   const source = songs[0]?.type ?? "local";
   if (source === "spotify" && !spotifyEnabled) {
-    showToast("Enable Spotify in config.json to edit Spotify tags.");
+    showToast("Enable Spotify in Spotify settings to edit Spotify tags.");
     return;
   }
 
@@ -496,6 +496,76 @@ async function createTag(event) {
   }
 }
 
+async function loadSpotifySettings() {
+  const settings = await request("/api/settings/spotify");
+  document.querySelector("#spotifyEnable").checked = settings.enable;
+  document.querySelector("#spotifyDeviceName").value = settings.spotifyDeviceName ?? "";
+  document.querySelector("#spotifyClientId").value = settings.clientId ?? "";
+  document.querySelector("#spotifyClientSecret").value = "";
+  document.querySelector("#spotifyClientSecret").placeholder = settings.hasClientSecret ? "Saved (unchanged)" : "Not set";
+  document.querySelector("#spotifyClearSecret").checked = false;
+}
+
+async function saveSpotifySettings(event) {
+  event.preventDefault();
+  const button = document.querySelector("#saveSpotifyButton");
+  const message = document.querySelector("#spotifySettingsMessage");
+  button.disabled = true;
+  message.textContent = "";
+  message.classList.remove("error");
+  try {
+    await request("/api/settings/spotify", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enable: document.querySelector("#spotifyEnable").checked,
+        spotifyDeviceName: document.querySelector("#spotifyDeviceName").value,
+        clientId: document.querySelector("#spotifyClientId").value,
+        clientSecret: document.querySelector("#spotifyClearSecret").checked
+          ? "" : document.querySelector("#spotifyClientSecret").value || null
+      })
+    });
+    if (editingUid && sourceSelect.value === "spotify" && !document.querySelector("#spotifyEnable").checked) cancelEdit();
+    await Promise.all([loadSpotifySettings(), refresh()]);
+    message.textContent = "Spotify settings saved";
+    showToast("Spotify settings saved");
+  } catch (error) {
+    message.classList.add("error");
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+const sectionTabs = [...document.querySelectorAll('.section-tabs [role="tab"]')];
+
+function selectSectionTab(selectedTab) {
+  for (const tab of sectionTabs) {
+    const selected = tab === selectedTab;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    document.getElementById(tab.getAttribute("aria-controls")).hidden = !selected;
+  }
+}
+
+for (const [index, tab] of sectionTabs.entries()) {
+  tab.addEventListener("click", () => selectSectionTab(tab));
+  tab.addEventListener("keydown", event => {
+    let nextIndex;
+    switch (event.key) {
+      case "ArrowRight": nextIndex = (index + 1) % sectionTabs.length; break;
+      case "ArrowLeft": nextIndex = (index - 1 + sectionTabs.length) % sectionTabs.length; break;
+      case "Home": nextIndex = 0; break;
+      case "End": nextIndex = sectionTabs.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    selectSectionTab(sectionTabs[nextIndex]);
+    sectionTabs[nextIndex].focus();
+  });
+}
+
+document.querySelector("#spotifySettingsForm").addEventListener("submit", saveSpotifySettings);
 sourceSelect.addEventListener("change", updateSourceFields);
 document.querySelector("#searchInput").addEventListener("input", renderTags);
 document.querySelector("#captureButton").addEventListener("click", event => captureUid(document.querySelector("#uidInput"), event.currentTarget));
@@ -521,4 +591,5 @@ document.querySelector("#tagForm").addEventListener("submit", createTag);
 document.querySelector("#refreshButton").addEventListener("click", () => refresh().catch(error => showToast(error.message)));
 
 refresh().catch(error => showToast(error.message));
+loadSpotifySettings().catch(error => showToast(error.message));
 renderQueue();

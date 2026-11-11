@@ -26,14 +26,20 @@
     <section class="page-heading">
       <div>
         <p class="eyebrow">PORTAL CONTROL / LIBRARY</p>
-        <h1>Tag library</h1>
+        <h1>Music manager</h1>
       </div>
       <button id="refreshButton" class="icon-button" type="button" title="Refresh library" aria-label="Refresh library">
         <span aria-hidden="true">↻</span>
       </button>
     </section>
 
-    <section class="control-section" aria-labelledby="controlHeading">
+    <div class="section-tabs" role="tablist" aria-label="Music manager sections">
+      <button id="libraryTab" class="section-tab" type="button" role="tab" aria-selected="true" aria-controls="libraryPanel">Tags &amp; music</button>
+      <button id="controlsTab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="controlsPanel" tabindex="-1">Playback controls</button>
+      <button id="spotifyTab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="spotifyPanel" tabindex="-1">Spotify settings</button>
+    </div>
+
+    <section id="controlsPanel" class="control-section tab-panel" role="tabpanel" aria-labelledby="controlsTab" tabindex="0" hidden>
       <div class="control-heading">
         <p class="eyebrow">PLAYBACK CONTROLS</p>
         <h2 id="controlHeading">Forward &amp; rewind tags</h2>
@@ -60,7 +66,42 @@
       </div>
     </section>
 
-    <section class="workspace" aria-label="Music tag manager">
+    <section id="spotifyPanel" class="spotify-settings tab-panel" role="tabpanel" aria-labelledby="spotifyTab" tabindex="0" hidden>
+      <div class="control-heading">
+        <p class="eyebrow">SPOTIFY CONNECT</p>
+        <h2 id="spotifySettingsHeading">Spotify settings</h2>
+      </div>
+      <form id="spotifySettingsForm">
+        <label class="spotify-toggle" for="spotifyEnable">
+          <input id="spotifyEnable" type="checkbox">
+          Enable Spotify
+        </label>
+        <div class="control-fields">
+          <div class="field-group">
+            <label for="spotifyDeviceName">Device name</label>
+            <input id="spotifyDeviceName" type="text" autocomplete="off">
+          </div>
+          <div class="field-group">
+            <label for="spotifyClientId">Client ID</label>
+            <input id="spotifyClientId" type="text" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field-group">
+            <label for="spotifyClientSecret">Client secret (optional for PKCE)</label>
+            <input id="spotifyClientSecret" type="password" autocomplete="new-password" spellcheck="false">
+          </div>
+          <label class="spotify-toggle" for="spotifyClearSecret">
+            <input id="spotifyClearSecret" type="checkbox">
+            Clear saved client secret
+          </label>
+        </div>
+        <div class="control-footer">
+          <span id="spotifySettingsMessage" class="form-message" role="status" aria-live="polite"></span>
+          <button id="saveSpotifyButton" class="button button-primary" type="submit">Save Spotify settings</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="libraryPanel" class="workspace tab-panel" role="tabpanel" aria-labelledby="libraryTab" tabindex="0">
       <section class="library-section">
         <div class="section-heading">
           <div>

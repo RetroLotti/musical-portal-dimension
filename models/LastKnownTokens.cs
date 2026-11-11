@@ -4,6 +4,9 @@
 
     public class LastKnownTokens
     {
+        [JsonProperty("clientId")]
+        public string? ClientId { get; set; }
+
         [JsonProperty("accessToken")]
         public string AccessToken { get; set; } = string.Empty;
 

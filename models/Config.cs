@@ -16,6 +16,7 @@
         [JsonProperty("spotifyDeviceName")]
         public string SpotifyDeviceName { get; set; } = null!;
 
+        [JsonIgnore]
         public string TokenFileName { get; set; } = null!;
     }
 }

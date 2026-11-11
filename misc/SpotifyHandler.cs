@@ -7,8 +7,12 @@
     using System.Net;
     using System.Text;
 
-    public class SpotifyHandler(Config config)
+    public class SpotifyHandler(Config config, SpotifyClientConfig? clientConfiguration = null)
     {
+        private Config _config = config;
+        private readonly SemaphoreSlim _operationLock = new(1, 1);
+        public Config Configuration => _config;
+
         private const string SpotifyTokenUrl = "https://accounts.spotify.com/api/token";
         private const string RedirectUri = "http://127.0.0.1:8888/callback";
 
@@ -20,52 +24,116 @@
         public static async Task<SpotifyHandler> CreateAsync(Config config)
         {
             var instance = new SpotifyHandler(config);
-            await instance.CheckToken();
+            await instance.CheckToken(allowInteractive: true);
             return instance;
+        }
+
+        public async Task InitializeAsync()
+        {
+            if (!_config.Enable) return;
+            if (!File.Exists(_config.TokenFileName))
+            {
+                Console.WriteLine("Spotify needs an initial interactive OAuth login. Local playback and web settings remain available.");
+                return;
+            }
+            await ExecuteAsync(async spotify => { await spotify.Player.GetAvailableDevices(); });
+        }
+
+        public async Task UpdateConfigurationAsync(Config configuration, string fileName)
+        {
+            await _operationLock.WaitAsync();
+            try
+            {
+                if (configuration.ClientId != _config.ClientId)
+                {
+                    var tokens = JsonFileHandler.ReadObjectFromJsonFile<LastKnownTokens>(_config.TokenFileName);
+                    if (tokens != null && string.IsNullOrEmpty(tokens.ClientId))
+                    {
+                        tokens.ClientId = _config.ClientId;
+                        await SaveJsonAsync(_config.TokenFileName, tokens);
+                    }
+                }
+                await SaveJsonAsync(fileName, configuration);
+                _config = configuration;
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
+        private static async Task SaveJsonAsync<T>(string fileName, T value)
+        {
+            var temporaryFile = fileName + ".tmp";
+            try
+            {
+                await File.WriteAllTextAsync(temporaryFile, JsonConvert.SerializeObject(value, Formatting.Indented));
+                File.Move(temporaryFile, fileName, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temporaryFile)) File.Delete(temporaryFile);
+            }
+        }
+
+        private async Task ExecuteAsync(Func<SpotifyClient, Task> action)
+        {
+            await _operationLock.WaitAsync();
+            try
+            {
+                if (!_config.Enable) throw new InvalidOperationException("Spotify is disabled.");
+                await CheckToken();
+                await action(new SpotifyClient((clientConfiguration ?? SpotifyClientConfig.CreateDefault()).WithToken(_accessToken)));
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
+        private async Task<string> GetDeviceIdAsync(SpotifyClient spotify, bool activate = false)
+        {
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                var devices = await spotify.Player.GetAvailableDevices();
+                var device = devices.Devices.FirstOrDefault(device =>
+                    string.Equals(device.Name, _config.SpotifyDeviceName, StringComparison.OrdinalIgnoreCase));
+                if (device?.Id != null)
+                {
+                    if (device.IsRestricted) throw new InvalidOperationException("The configured Spotify device does not allow playback control.");
+                    if (activate && !device.IsActive)
+                    {
+                        await spotify.Player.TransferPlayback(new PlayerTransferPlaybackRequest(new List<string> { device.Id }) { Play = false });
+                    }
+                    return device.Id;
+                }
+                if (attempt < 4) await Task.Delay(TimeSpan.FromSeconds(1));
+            }
+
+            throw new InvalidOperationException($"Spotify device '{_config.SpotifyDeviceName}' is unavailable. Check that the Pi's Spotify Connect receiver is running and signed in; the Web API cannot start or authenticate the receiver. No other device was selected.");
         }
 
         public async Task PlayAsync(string spotifyType, string spotifyId)
         {
-            // check for or refresh access token
-            await CheckToken();
-
-            // create client
-            var spotify = new SpotifyClient(_accessToken);
-
-            var devices = await spotify.Player.GetAvailableDevices();
-            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
-
-            if (deviceId == null)
+            await ExecuteAsync(async spotify =>
             {
-                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
-                Console.WriteLine("Showing available devices: ");
-                for (var i = 0; i < devices.Devices.Count; i++)
+                var deviceId = await GetDeviceIdAsync(spotify, activate: true);
+                var uri = $"spotify:{spotifyType}:{spotifyId}";
+                var playbackRequest = new PlayerResumePlaybackRequest { DeviceId = deviceId };
+
+                switch (spotifyType)
                 {
-                    var device = devices.Devices[i];
-                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
+                    case "album":
+                    case "playlist":
+                        playbackRequest.ContextUri = uri;
+                        break;
+                    default:
+                        playbackRequest.Uris = new List<string> { uri };
+                        break;
                 }
-                Console.WriteLine("End of list.");
-            }
 
-            var uri = $"spotify:{spotifyType}:{spotifyId}";
-            var playbackRequest = new PlayerResumePlaybackRequest { DeviceId = deviceId };
-
-            switch (spotifyType)
-            {
-                case "album":
-                case "playlist":
-                    playbackRequest.ContextUri = uri;
-                    break;
-                default:
-                    playbackRequest.Uris = new List<string> { uri };
-                    break;
-            }
-
-            // TODO: save position of current track before changing the song or resume from saved position (if possible)
-            // 
-
-            // actually play an album or song
-            await spotify.Player.ResumePlayback(playbackRequest);
+                await spotify.Player.ResumePlayback(playbackRequest);
+            });
         }
 
         public async Task WhateverAsync()
@@ -81,86 +149,29 @@
 
         public async Task PauseAsync()
         {
-            // check for or refresh access token
-            await CheckToken();
-
-            // create client
-            var spotify = new SpotifyClient(_accessToken);
-
-            var devices = await spotify.Player.GetAvailableDevices();
-            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
-
-            if (deviceId == null)
+            await ExecuteAsync(async spotify =>
             {
-                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
-                Console.WriteLine("Showing available devices: ");
-                for (var i = 0; i < devices.Devices.Count; i++)
-                {
-                    var device = devices.Devices[i];
-                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
-                }
-                Console.WriteLine("End of list.");
-            }
-            else
-            {
-                await spotify.Player.PausePlayback();
-            }
+                var deviceId = await GetDeviceIdAsync(spotify);
+                await spotify.Player.PausePlayback(new PlayerPausePlaybackRequest { DeviceId = deviceId });
+            });
         }
 
         public async Task PreviousTrackAsync()
         {
-            // check for or refresh access token
-            await CheckToken();
-
-            // create client
-            var spotify = new SpotifyClient(_accessToken);
-
-            var devices = await spotify.Player.GetAvailableDevices();
-            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
-
-            if (deviceId == null)
+            await ExecuteAsync(async spotify =>
             {
-                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
-                Console.WriteLine("Showing available devices: ");
-                for (var i = 0; i < devices.Devices.Count; i++)
-                {
-                    var device = devices.Devices[i];
-                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
-                }
-                Console.WriteLine("End of list.");
-            }
-            else
-            {
-                await spotify.Player.SkipPrevious();
-            }
+                var deviceId = await GetDeviceIdAsync(spotify);
+                await spotify.Player.SkipPrevious(new PlayerSkipPreviousRequest { DeviceId = deviceId });
+            });
         }
 
         public async Task NextTrackAsync()
         {
-            // check for or refresh access token
-            await CheckToken();
-
-            // create client
-            var spotify = new SpotifyClient(_accessToken);
-
-            var devices = await spotify.Player.GetAvailableDevices();
-            var deviceId = devices.Devices.FirstOrDefault(d => d.Name == config.SpotifyDeviceName)?.Id;
-
-            if (deviceId == null)
+            await ExecuteAsync(async spotify =>
             {
-                Console.WriteLine($"Configured device [{config.SpotifyDeviceName}] not found.");
-                Console.WriteLine("Showing available devices: ");
-                for (var i = 0; i < devices.Devices.Count; i++)
-                {
-                    var device = devices.Devices[i];
-                    Console.WriteLine($"[{i}]: {device.Id} - {device.Name} - {device.IsActive}");
-                }
-                Console.WriteLine("End of list.");
-            }
-            else
-            {
-                await spotify.Player.SkipNext();
-            }
+                var deviceId = await GetDeviceIdAsync(spotify);
+                await spotify.Player.SkipNext(new PlayerSkipNextRequest { DeviceId = deviceId });
+            });
         }
 
         public async Task StopAsync()
@@ -170,10 +181,11 @@
 
         public async Task ResumeAsync()
         {
-            await CheckToken();
-
-            var spotify = new SpotifyClient(_accessToken);
-            await spotify.Player.ResumePlayback();
+            await ExecuteAsync(async spotify =>
+            {
+                var deviceId = await GetDeviceIdAsync(spotify, activate: true);
+                await spotify.Player.ResumePlayback(new PlayerResumePlaybackRequest { DeviceId = deviceId });
+            });
         }
 
         private static async Task<SpotifyTokenResponse?> RefreshTokenAsync(string clientId, string refreshToken)
@@ -181,10 +193,12 @@
             using var httpClient = new HttpClient();
 
             // Prepare the request content
-            var content = new StringContent(
-                $"grant_type=refresh_token&refresh_token={refreshToken}&client_id={clientId}",
-                Encoding.UTF8,
-                "application/x-www-form-urlencoded");
+            using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "refresh_token",
+                ["refresh_token"] = refreshToken,
+                ["client_id"] = clientId
+            });
 
             // Send the POST request
             var response = await httpClient.PostAsync(SpotifyTokenUrl, content);
@@ -201,29 +215,32 @@
             return tokenResponse;
         }
 
-        private Task<bool> SaveTokenAsync()
+        private async Task SaveTokenAsync()
         {
             var tokens = new LastKnownTokens
             {
+            ClientId = _config.ClientId,
                 ExpiresIn = _expiresIn,
                 AccessToken = _accessToken,
                 RefreshToken = _refreshToken,
                 CreatedAt = _createdAt
             };
 
-            JsonFileHandler.SaveObjectToJsonFile(config.TokenFileName, tokens);
-
-            return Task.FromResult(true);
+            await SaveJsonAsync(_config.TokenFileName, tokens);
         }
 
-        private async Task CheckToken()
+        private async Task CheckToken(bool allowInteractive = false)
         {
             // check for token file
-            var tokens = JsonFileHandler.ReadObjectFromJsonFile<LastKnownTokens>(config.TokenFileName);
+            var tokens = JsonFileHandler.ReadObjectFromJsonFile<LastKnownTokens>(_config.TokenFileName);
 
             // refresh else new connect
             if (tokens != null)
             {
+                if (!string.IsNullOrEmpty(tokens.ClientId) && tokens.ClientId != _config.ClientId)
+                {
+                    throw new InvalidOperationException("Spotify client ID changed. Back up/remove config/tokens.json and complete OAuth again for this client ID.");
+                }
                 _accessToken = tokens.AccessToken;
                 _refreshToken = tokens.RefreshToken;
                 _expiresIn = tokens.ExpiresIn;
@@ -231,7 +248,7 @@
 
                 if (tokens.IsExpired)
                 {
-                    var newToken = await RefreshTokenAsync(config.ClientId, _refreshToken);
+                    var newToken = await RefreshTokenAsync(_config.ClientId, _refreshToken);
                     if (newToken != null)
                     {
                         _accessToken = newToken.AccessToken;
@@ -253,12 +270,15 @@
             }
             else
             {
+                if (!allowInteractive)
+                    throw new InvalidOperationException("Spotify login is required. Run MusicDimension with --spotify-login interactively before using Spotify playback.");
+
                 // 1. PKCE Code Verifier und Challenge generieren
                 var codeVerifier = GenerateCodeVerifier();
                 var codeChallenge = GenerateCodeChallenge(codeVerifier);
 
                 // 2. Authorize URL erstellen
-                var loginRequest = new LoginRequest(new Uri(RedirectUri), config.ClientId, LoginRequest.ResponseType.Code)
+                var loginRequest = new LoginRequest(new Uri(RedirectUri), _config.ClientId, LoginRequest.ResponseType.Code)
                 {
                     CodeChallengeMethod = "S256",
                     CodeChallenge = codeChallenge,
@@ -269,17 +289,28 @@
 
                 Console.WriteLine($"open this link to authenticate:\n{authUri}");
 
-                Process.Start(new ProcessStartInfo
+                try
                 {
-                    FileName = authUri.ToString(),
-                    UseShellExecute = true
-                });
+                    if (!OperatingSystem.IsLinux() || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY"))
+                        || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = authUri.ToString(),
+                            UseShellExecute = true
+                        });
+                    }
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    Console.WriteLine("Could not open a browser. Open the printed login URL manually.");
+                }
 
                 // 4. Redirect URI abwarten (HTTP-Listener starten)
                 var authorizationCode = await WaitForAuthorizationCode();
 
                 // 5. Access Token mit PKCE anfordern
-                var tokenRequest = new PKCETokenRequest(config.ClientId, authorizationCode, new Uri(RedirectUri), codeVerifier);
+                var tokenRequest = new PKCETokenRequest(_config.ClientId, authorizationCode, new Uri(RedirectUri), codeVerifier);
                 var oauthClient = new OAuthClient();
                 var tokenResponse = await oauthClient.RequestToken(tokenRequest);
 
