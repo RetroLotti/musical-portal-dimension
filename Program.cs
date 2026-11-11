@@ -15,13 +15,14 @@
         private static LocalMusicHandler _localMusicHandler = null!;
 
         private static Config _config = null!;
-        private static MusicConfig _musicConfig = null!;
+        private static MusicConfigStore _musicStore = null!;
+        private static readonly ReaderCaptureState ReaderCapture = new();
         private static string? _currentTagUid;
         private static SourceTypes? _currentPlaybackSource;
         private static string? _pausedTagUid;
         private static SourceTypes? _pausedPlaybackSource;
 
-        private static async Task Main(string[] _)
+        private static async Task Main(string[] args)
         {
             // check for config files
             if (!CheckFiles()) return;
@@ -35,7 +36,7 @@
             _config.TokenFileName = TokenFileName;
 
             // read music config from file
-            _musicConfig = JsonFileHandler.ReadObjectFromJsonFile<MusicConfig>(MusicFileName) ?? new MusicConfig();
+            _musicStore = new MusicConfigStore(MusicFileName);
             Console.WriteLine($"Object read from {MusicFileName}");
 
             //_localMusicHandler = new LocalMusicHandler();
@@ -44,6 +45,10 @@
             // init handler
             Console.WriteLine("Initializing LEGO Dimensions Portal...");
             _portalHandler = new PortalHandler();
+            var app = MusicWebHost.Create(_musicStore, ReaderCapture, _config.Enable, () => _portalHandler.IsConnected);
+            await app.StartAsync();
+            Console.WriteLine("Music manager: http://127.0.0.1:5080");
+
             if (_config.Enable)
             {
                 Console.WriteLine("Initializing Spotify...");
@@ -56,36 +61,28 @@
             Console.WriteLine("Initializing VLC library...");
             _localMusicHandler = new LocalMusicHandler();
 
-            // try to connect/identify the portal
-            _portalHandler.Connect();
-
-            // check if connection was not successful
-            if (!_portalHandler.IsConnected)
+            _ = Task.Run(() =>
             {
-                Console.WriteLine("Press any key to exit");
-                Console.ReadKey();
-                return;
-            }
+                _portalHandler.Connect();
+                if (_portalHandler.IsConnected)
+                {
+                    _portalHandler.Portal!.LegoTagEvent += PortalOnLegoTagEvent;
+                    Console.WriteLine("Portal is connected.");
+                }
+                else
+                {
+                    Console.WriteLine("Portal not connected. You can still add tags with a manually entered UID.");
+                }
+            });
 
-            // add event to react on placing an nfc tag on any pad
-            _portalHandler.Portal!.LegoTagEvent += PortalOnLegoTagEvent;
-
-            Console.WriteLine("Portal is now active!");
-            Console.WriteLine("Press any key to deactivate.");
-
-            if (Environment.UserInteractive)
+            try
             {
-                // loop for terminal sessions
-                while (!Console.KeyAvailable) { Thread.Sleep(1000); }
+                await app.WaitForShutdownAsync();
             }
-            else
+            finally
             {
-                // loop for running as a daemon 
-                while (true) { Thread.Sleep(1000); }
+                _portalHandler.Disconnect();
             }
-
-            // set to disconnected
-            _portalHandler.Disconnect();
         }
 
         private static bool CheckFiles()
@@ -101,7 +98,26 @@
         // ReSharper disable once AsyncVoidMethod
         private static async void PortalOnLegoTagEvent(object? sender, LegoTagEventArgs e)
         {
+            try
+            {
+                await HandlePortalTagEventAsync(e);
+            }
+            catch (Exception exception)
+            {
+                _portalHandler.IsTransferring = false;
+                Console.WriteLine($"Could not handle portal tag event: {exception.Message}");
+            }
+        }
+
+        private static async Task HandlePortalTagEventAsync(LegoTagEventArgs e)
+        {
             var uid = BitConverter.ToString(e.CardUid);
+
+            if (e.Present && ReaderCapture.TagPresented(uid))
+            {
+                Console.WriteLine($"Captured tag UID: {uid}");
+                return;
+            }
 
             if (!e.Present)
             {
@@ -151,7 +167,7 @@
             }
 
             // check if tag is control tag
-            if (_config.Enable && _musicConfig.ControlTags.TryGetValue(uid, out var value))
+            if (_config.Enable && _musicStore.Snapshot().ControlTags.TryGetValue(uid, out var value))
             {
                 switch (value)
                 {
@@ -194,25 +210,30 @@
                     Console.WriteLine($"Now playing: {song.Name}");
                     break;
                 case SourceTypes.Local:
-                    var localPath = song.Path?.Replace('#', Path.DirectorySeparatorChar);
-                    if (string.IsNullOrWhiteSpace(localPath))
+                    var localPaths = songs
+                        .Where(item => item.Type == SourceTypes.Local)
+                        .Select(item => item.Path?.Replace('#', Path.DirectorySeparatorChar))
+                        .Where(path => !string.IsNullOrWhiteSpace(path))
+                        .Select(path => Path.GetFullPath(path!))
+                        .ToList();
+                    if (localPaths.Count == 0)
                     {
-                        Console.WriteLine($"No local media path configured for {song.Name}.");
+                        Console.WriteLine($"No local media paths configured for {song.Name}.");
                         break;
                     }
 
-                    var resolvedLocalPath = Path.GetFullPath(localPath);
-                    if (!File.Exists(resolvedLocalPath))
+                    var missingPath = localPaths.FirstOrDefault(path => !File.Exists(path));
+                    if (missingPath != null)
                     {
-                        Console.WriteLine($"Local media file not found: {resolvedLocalPath}");
+                        Console.WriteLine($"Local media file not found: {missingPath}");
                         break;
                     }
 
-                    _localMusicHandler.Play(resolvedLocalPath);
+                    _localMusicHandler.Play(localPaths);
                     _portalHandler.IsTransferring = true;
                     _currentTagUid = uid;
                     _currentPlaybackSource = SourceTypes.Local;
-                    Console.WriteLine($"Now playing: {song.Name}");
+                    Console.WriteLine($"Now playing {localPaths.Count} local file(s) for: {song.Name}");
                     break;
                 case SourceTypes.Other:
                     Console.WriteLine("This source type is not handled yet.");
@@ -225,12 +246,7 @@
 
         private static List<Song> GetMusic(string tagUid)
         {
-            foreach (var tag in _musicConfig.RegisteredTags.Where(tag => tag.Uid.Equals(tagUid)))
-            {
-                return tag.Songs;
-            }
-
-            return [];
+            return _musicStore.GetSongs(tagUid);
         }
     }
 }

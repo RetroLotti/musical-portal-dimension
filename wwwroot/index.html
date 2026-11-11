@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#183b34">
+  <title>Music Dimension | Tag library</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Music Dimension home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>Music <b>Dimension</b></span>
+    </a>
+    <div class="topbar-status">
+      <span id="readerIndicator" class="status-dot"></span>
+      <span id="readerStatus">Checking reader</span>
+      <span class="status-divider"></span>
+      <span id="spotifyStatus">Checking Spotify</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-heading">
+      <div>
+        <p class="eyebrow">PORTAL CONTROL / LIBRARY</p>
+        <h1>Tag library</h1>
+      </div>
+      <button id="refreshButton" class="icon-button" type="button" title="Refresh library" aria-label="Refresh library">
+        <span aria-hidden="true">↻</span>
+      </button>
+    </section>
+
+    <section class="workspace" aria-label="Music tag manager">
+      <section class="library-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">COLLECTION</p>
+            <h2>Registered tags <span id="tagCount" class="count">0</span></h2>
+          </div>
+        </div>
+        <label class="search-box">
+          <span aria-hidden="true">⌕</span>
+          <input id="searchInput" type="search" placeholder="Find a tag or UID" autocomplete="off">
+        </label>
+        <div id="tagList" class="tag-list" aria-live="polite"></div>
+      </section>
+
+      <section class="editor-section">
+        <div class="section-heading editor-heading">
+          <div>
+            <p class="eyebrow">NEW ENTRY</p>
+            <h2>Register a tag</h2>
+          </div>
+          <span class="step-number">01</span>
+        </div>
+
+        <form id="tagForm">
+          <div class="field-group">
+            <label for="uidInput">Tag UID</label>
+            <div class="uid-control">
+              <input id="uidInput" name="uid" type="text" placeholder="04-00-00-00-00-00-00" autocomplete="off" required>
+              <button id="captureButton" class="button button-secondary" type="button">Scan tag</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="nameInput">Tag name</label>
+            <input id="nameInput" name="name" type="text" placeholder="e.g. Peter Venkman" maxlength="100" required>
+          </div>
+
+          <div class="field-group">
+            <label for="sourceSelect">Playback source</label>
+            <select id="sourceSelect" name="type">
+              <option value="local">Local media</option>
+              <option value="spotify">Spotify</option>
+            </select>
+          </div>
+
+          <div id="localFields" class="source-fields">
+            <div class="upload-row">
+              <label class="upload-button" for="mediaUpload">＋ Add media files</label>
+              <input id="mediaUpload" class="visually-hidden" type="file" accept="audio/*,.m3u,.m3u8" multiple>
+              <span id="uploadStatus" class="field-note">Scan or enter the UID first. Audio and M3U files supported.</span>
+            </div>
+            <div class="queue-area">
+              <div class="queue-heading">
+                <span>Playback order</span>
+                <span id="queueCount" class="queue-count">0 tracks</span>
+              </div>
+              <ol id="trackQueue" class="track-queue" aria-live="polite"></ol>
+            </div>
+          </div>
+
+          <div id="spotifyFields" class="source-fields" hidden>
+            <div class="field-row">
+              <div class="field-group">
+                <label for="spotifyType">Spotify item</label>
+                <select id="spotifyType" name="spotifyType">
+                  <option value="track">Track</option>
+                  <option value="album">Album</option>
+                  <option value="playlist">Playlist</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label for="spotifyId">Spotify ID</label>
+                <input id="spotifyId" name="spotifyId" type="text" placeholder="Item ID">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <span id="formMessage" class="form-message" role="status" aria-live="polite"></span>
+            <button id="saveButton" class="button button-primary" type="submit">Add tag <span aria-hidden="true">↗</span></button>
+          </div>
+        </form>
+      </section>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

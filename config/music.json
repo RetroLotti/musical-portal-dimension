@@ -1,13 +1,25 @@
 {
-  "validSourceTypes": [ "spotify", "local", "other" ],
-  "validSpotifyTypes":  [ "album", "track", "playlist" ],
-  "validControlTypes": [ "stop", "pause", "play", "next", "previous", "repeat", "shuffle", "volumneup", "volumnedown" ],
-  /* set these to you liking */
-  "controlTags": {
-    "00-00-00-00-00-00-00": "pause",
-    "00-00-00-00-00-00-01": "next"
-  },
-  /* to be implemented / just a reference for myself */
+  "validSourceTypes": [
+    "spotify",
+    "local",
+    "other"
+  ],
+  "validSpotifyTypes": [
+    "album",
+    "track",
+    "playlist"
+  ],
+  "validControlTypes": [
+    "stop",
+    "pause",
+    "play",
+    "next",
+    "previous",
+    "repeat",
+    "shuffle",
+    "volumneup",
+    "volumnedown"
+  ],
   "unusedTags": {
     "04-06-BC-7A-5C-49-81": "The Doctor",
     "04-A2-81-0A-B4-43-80": "Scooby Doo",
@@ -21,13 +33,6 @@
     "04-43-35-92-75-40-81": "Batmobile",
     "04-3C-82-12-5B-49-80": "T.A.R.D.I.S."
   },
-  /* to be implemented */
-  "shortTags": {
-    "04-27-C1-9A-F0-4A-81": "spotify:track:63y2aL2dT6zzw8FOSLaNrp",
-    "04-64-63-5A-9A-40-80": "spotify:track:6zW80jVqLtgSF1yCtGHiiD",
-    "04-2F-8C-02-9A-40-80": "spotify:playlist:6XhhPuQl9ySFyQD3lfHHxK",
-    "04-7A-B7-2A-F6-48-81": "spotify:track:49rm3b1tcPvHCBtt59bas1"
-  },
   "registeredTags": [
     {
       "uid": "04-27-C1-9A-F0-4A-81",
@@ -36,6 +41,7 @@
         {
           "name": "This is Halloween",
           "type": "spotify",
+          "path": null,
           "spotifyType": "track",
           "spotifyId": "63y2aL2dT6zzw8FOSLaNrp"
         }
@@ -48,6 +54,7 @@
         {
           "name": "The Shire",
           "type": "spotify",
+          "path": null,
           "spotifyType": "track",
           "spotifyId": "6zW80jVqLtgSF1yCtGHiiD"
         }
@@ -60,6 +67,7 @@
         {
           "name": "Smooth Music",
           "type": "spotify",
+          "path": null,
           "spotifyType": "playlist",
           "spotifyId": "6XhhPuQl9ySFyQD3lfHHxK"
         }
@@ -72,6 +80,7 @@
         {
           "name": "Pommesgabel",
           "type": "spotify",
+          "path": null,
           "spotifyType": "track",
           "spotifyId": "49rm3b1tcPvHCBtt59bas1"
         }
@@ -85,10 +94,123 @@
           "name": "Just some Music (ogg)",
           "type": "local",
           "path": "media#rick.ogg",
-          "spotifyType": "",
+          "spotifyType": null,
           "spotifyId": ""
         }
       ]
+    },
+    {
+      "uid": "04-71-8A-A2-13-43-80",
+      "name": "Scooby oder Shaggy",
+      "songs": [
+        {
+          "name": "Scooby oder Shaggy",
+          "type": "local",
+          "path": "media#Deine Lakaien - Kasmodiah.m3u",
+          "spotifyType": null,
+          "spotifyId": null
+        }
+      ]
+    },
+    {
+      "uid": "04-20-B4-C2-6D-40-81",
+      "name": "Wyldstyle",
+      "songs": [
+        {
+          "name": "01 - And One - Mein Anfang",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#01 - And One - Mein Anfang.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "02 - And One - Military Fashion Show",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#02 - And One - Military Fashion Show.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "03 - And One - Enjoy The Unknown",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#03 - And One - Enjoy The Unknown.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "04 - And One - So klingt Liebe",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#04 - And One - So klingt Liebe.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "05 - And One - The Sound Of Believer",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#05 - And One - The Sound Of Believer.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "06 - And One - Body Company",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#06 - And One - Body Company.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "07 - And One - Traumfrau",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#07 - And One - Traumfrau.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "08 - And One - Stand The Pain",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#08 - And One - Stand The Pain.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "09 - And One - Sexkeit",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#09 - And One - Sexkeit.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "10 - And One - Love You To The End",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#10 - And One - Love You To The End.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "11 - And One - The Dream",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#11 - And One - The Dream.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "12 - And One - Dein Ende",
+          "type": "local",
+          "path": "media#04-20-B4-C2-6D-40-81#12 - And One - Dein Ende.mp3",
+          "spotifyType": null,
+          "spotifyId": null
+        }
+      ]
     }
-  ]
+  ],
+  "shortTags": {
+    "04-27-C1-9A-F0-4A-81": "spotify:track:63y2aL2dT6zzw8FOSLaNrp",
+    "04-64-63-5A-9A-40-80": "spotify:track:6zW80jVqLtgSF1yCtGHiiD",
+    "04-2F-8C-02-9A-40-80": "spotify:playlist:6XhhPuQl9ySFyQD3lfHHxK",
+    "04-7A-B7-2A-F6-48-81": "spotify:track:49rm3b1tcPvHCBtt59bas1"
+  },
+  "controlTags": {
+    "00-00-00-00-00-00-00": "pause",
+    "00-00-00-00-00-00-01": "next"
+  }
 }
