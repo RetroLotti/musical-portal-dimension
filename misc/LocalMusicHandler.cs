@@ -16,9 +16,11 @@
             Core.Initialize();
 
             var audioOutput = Environment.GetEnvironmentVariable("MUSICDIMENSION_AUDIO_OUTPUT");
-            Library = string.IsNullOrWhiteSpace(audioOutput)
-                ? new LibVLC()
-                : new LibVLC($"--aout={audioOutput}");
+            var alsaDevice = Environment.GetEnvironmentVariable("MUSICDIMENSION_ALSA_DEVICE");
+            var options = new List<string>();
+            if (!string.IsNullOrWhiteSpace(audioOutput)) options.Add($"--aout={audioOutput}");
+            if (!string.IsNullOrWhiteSpace(alsaDevice)) options.Add($"--alsa-audio-device={alsaDevice}");
+            Library = options.Count == 0 ? new LibVLC() : new LibVLC(options.ToArray());
             Player = new MediaPlayer(Library);
             Player.EndReached += (_, _) => _ = Task.Run(PlayNextTrack);
         }
