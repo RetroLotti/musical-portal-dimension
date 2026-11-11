@@ -9,6 +9,9 @@ const formMessage = document.querySelector("#formMessage");
 const toast = document.querySelector("#toast");
 const mediaDialog = document.querySelector("#mediaDialog");
 const availableMediaList = document.querySelector("#availableMediaList");
+const spotifySearchDialog = document.querySelector("#spotifySearchDialog");
+const spotifySearchResults = document.querySelector("#spotifySearchResults");
+let spotifySearchController;
 
 let library = { registeredTags: [] };
 let mediaFiles = [];
@@ -223,6 +226,7 @@ function addSelectedMedia() {
 }
 
 async function editTag(tag) {
+  document.querySelector("#spotifySelectionMessage").textContent = "";
   const songs = tag.songs ?? [];
   const source = songs[0]?.type ?? "local";
   if (source === "spotify" && !spotifyEnabled) {
@@ -271,6 +275,7 @@ async function editTag(tag) {
 }
 
 function cancelEdit() {
+  document.querySelector("#spotifySelectionMessage").textContent = "";
   editingUid = null;
   queueUid = null;
   uploadQueue = [];
@@ -535,6 +540,129 @@ async function saveSpotifySettings(event) {
   } finally {
     button.disabled = false;
   }
+}
+
+function clearSpotifySearch() {
+  spotifySearchController?.abort();
+  spotifySearchController = null;
+  spotifySearchResults.replaceChildren();
+  spotifySearchResults.setAttribute("aria-busy", "false");
+  document.querySelector("#spotifySearchButton").disabled = false;
+  document.querySelector("#spotifySearchStatus").textContent = "";
+}
+
+function openSpotifySearch() {
+  if (!spotifyEnabled) {
+    showToast("Enable Spotify in Spotify settings first.");
+    return;
+  }
+  clearSpotifySearch();
+  document.querySelector("#spotifySearchType").value = document.querySelector("#spotifyType").value;
+  spotifySearchDialog.showModal();
+  document.querySelector("#spotifySearchQuery").focus();
+}
+
+function selectSpotifyResult(result) {
+  document.querySelector("#spotifyType").value = result.type;
+  document.querySelector("#spotifyId").value = result.id;
+  const name = document.querySelector("#nameInput");
+  if (!name.value.trim()) name.value = result.name.slice(0, name.maxLength);
+  document.querySelector("#spotifySelectionMessage").textContent = `Selected: ${result.name}${result.subtitle ? ` - ${result.subtitle}` : ""}`;
+  spotifySearchDialog.close();
+}
+
+function renderSpotifyResults(results) {
+  spotifySearchResults.replaceChildren();
+  for (const result of results) {
+    const row = document.createElement("article");
+    row.className = "spotify-result-row";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "spotify-result";
+    button.setAttribute("aria-label", `Select ${result.name}${result.subtitle ? ` by ${result.subtitle}` : ""}`);
+    button.addEventListener("click", () => selectSpotifyResult(result));
+    const artwork = document.createElement("span");
+    artwork.className = "spotify-artwork";
+    artwork.setAttribute("aria-hidden", "true");
+    artwork.textContent = "♪";
+    if (result.imageUrl?.startsWith("https://")) {
+      const image = document.createElement("img");
+      image.src = result.imageUrl;
+      image.alt = "";
+      image.addEventListener("error", () => { artwork.textContent = "♪"; });
+      artwork.replaceChildren(image);
+    }
+    const copy = document.createElement("span");
+    copy.className = "spotify-result-copy";
+    const title = document.createElement("span");
+    title.className = "spotify-result-title";
+    title.textContent = result.name;
+    const detail = document.createElement("span");
+    detail.className = "spotify-result-detail";
+    detail.textContent = `${result.type}${result.subtitle ? ` - ${result.subtitle}` : ""}`;
+    copy.append(title, detail);
+    button.append(artwork, copy);
+    const link = document.createElement("a");
+    link.className = "spotify-result-link";
+    link.href = `https://open.spotify.com/${encodeURIComponent(result.type)}/${encodeURIComponent(result.id)}`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Spotify ↗";
+    link.setAttribute("aria-label", `Open ${result.name} in Spotify`);
+    row.append(button, link);
+    spotifySearchResults.append(row);
+  }
+}
+
+async function searchSpotify(event) {
+  event.preventDefault();
+  clearSpotifySearch();
+  const query = document.querySelector("#spotifySearchQuery").value.trim();
+  const type = document.querySelector("#spotifySearchType").value;
+  const status = document.querySelector("#spotifySearchStatus");
+  status.classList.remove("error");
+  if (!query) {
+    status.textContent = "Enter a search term.";
+    return;
+  }
+  const controller = new AbortController();
+  spotifySearchController = controller;
+  document.querySelector("#spotifySearchButton").disabled = true;
+  spotifySearchResults.setAttribute("aria-busy", "true");
+  status.textContent = "Searching Spotify...";
+  try {
+    const parameters = new URLSearchParams({ q: query, type });
+    const results = await request(`/api/spotify/search?${parameters}`, { signal: controller.signal });
+    if (spotifySearchController !== controller) return;
+    renderSpotifyResults(results);
+    status.textContent = results.length ? `${results.length} result${results.length === 1 ? "" : "s"}` : "No matches found.";
+  } catch (error) {
+    if (controller.signal.aborted || spotifySearchController !== controller) return;
+    status.classList.add("error");
+    status.textContent = error.message;
+  } finally {
+    if (spotifySearchController === controller) {
+      spotifySearchResults.setAttribute("aria-busy", "false");
+      document.querySelector("#spotifySearchButton").disabled = false;
+    }
+  }
+}
+
+document.querySelector("#openSpotifySearch").addEventListener("click", openSpotifySearch);
+document.querySelector("#closeSpotifySearch").addEventListener("click", () => spotifySearchDialog.close());
+spotifySearchDialog.addEventListener("close", clearSpotifySearch);
+spotifySearchDialog.addEventListener("keydown", event => {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  spotifySearchDialog.close();
+});
+document.querySelector("#spotifySearchForm").addEventListener("submit", searchSpotify);
+document.querySelector("#spotifySearchQuery").addEventListener("input", clearSpotifySearch);
+document.querySelector("#spotifySearchType").addEventListener("change", clearSpotifySearch);
+for (const selector of ["#spotifyId", "#spotifyType"]) {
+  document.querySelector(selector).addEventListener("input", () => {
+    document.querySelector("#spotifySelectionMessage").textContent = "";
+  });
 }
 
 const sectionTabs = [...document.querySelectorAll('.section-tabs [role="tab"]')];

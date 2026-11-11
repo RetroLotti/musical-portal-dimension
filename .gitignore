@@ -364,3 +364,4 @@ FodyWeavers.xsd
 
 /media/*
 /media/**/*
+config/config.json

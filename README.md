@@ -85,6 +85,12 @@ The web manager's **Spotify settings** section edits `enable`, `spotifyDeviceNam
 
 Complete the first OAuth login interactively with `./MusicDimension --spotify-login` (or `dotnet run -- --spotify-login` from source). Register `http://127.0.0.1:8888/callback` in the Spotify developer dashboard. The browser callback must reach the machine running this command; for a headless Pi, use an SSH tunnel for port 8888, open the printed URL on your computer, and run the command as a user who can write the Pi's config directory. Keep the generated `config/tokens.json` readable/writable by the `musicdimension` service user. Normal startup never waits for browser login, and Spotify failures do not block local playback. When changing the client ID, back up/remove the old token file and repeat login for the new app. Keep `config/config.json`, `config/music.json`, `config/tokens.json`, and `media/` when updating the published binaries.
 
+### Search Spotify For A Tag
+
+In **Tags & music**, choose **Spotify** as the playback source, then **Search Spotify**. Search for tracks, albums, or playlists by title, artist, or playlist name. Results show artwork and artist/owner details, with links to open the items in Spotify. Selecting a result fills its type and ID; if the tag name is blank, it is filled from the result too. Save the tag as usual. Each tag selects one Spotify track, album, or playlist. Manual type/ID entry remains available.
+
+Search requires enabled Spotify support and an existing OAuth login, but does not require the Pi's playback device to be active. It uses the configured Spotify account on the server and returns up to ten results per submitted search. Spotify developer-app/account restrictions can limit search, particularly playlist availability; when search is unavailable or rate limited, the dialog reports the error and manual ID entry still works. No Spotify credentials are sent to the browser.
+
 ### Spotify After A Pi Reboot
 
 There are two separate logins: MusicDimension's Web API OAuth tokens and the librespot/raspotify Spotify Connect receiver's own account session. OAuth tokens do not authenticate the receiver. The application now retries device discovery briefly, explicitly transfers playback to an inactive configured device before play/resume, and targets that device for all playback controls. It never falls back to playing on your phone if the Pi is missing. Startup only checks the Web API connection; it does not take playback away from another device.

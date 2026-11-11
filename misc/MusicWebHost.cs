@@ -38,6 +38,8 @@ namespace MusicDimension.misc
             app.MapGet("/api/library", () => Results.Ok(store.Snapshot()));
             app.MapGet("/api/status", () => Results.Ok(new { spotifyEnabled = spotify.Configuration.Enable, readerConnected = isReaderConnected() }));
             app.MapGet("/api/settings/spotify", () => Results.Ok(GetSpotifySettings(spotify)));
+            app.MapGet("/api/spotify/search", (string? q, string? type, CancellationToken cancellationToken) =>
+                SearchSpotifyAsync(q, type, spotify, cancellationToken));
             app.MapPut("/api/settings/spotify", async (UpdateSpotifySettingsRequest request) =>
             {
                 if (request.Enable && (string.IsNullOrWhiteSpace(request.ClientId) || string.IsNullOrWhiteSpace(request.SpotifyDeviceName)))
@@ -86,6 +88,41 @@ namespace MusicDimension.misc
             var configuration = spotify.Configuration;
             return new(configuration.Enable, configuration.ClientId, configuration.SpotifyDeviceName,
                 !string.IsNullOrEmpty(configuration.ClientSecret));
+        }
+
+        private static async Task<IResult> SearchSpotifyAsync(string? query, string? type, SpotifyHandler spotify, CancellationToken cancellationToken)
+        {
+            query = query?.Trim();
+            if (string.IsNullOrEmpty(query) || query.Length > 200)
+                return Results.BadRequest(new { message = "Enter a Spotify search between 1 and 200 characters." });
+            if (type is not ("track" or "album" or "playlist"))
+                return Results.BadRequest(new { message = "Choose tracks, albums, or playlists." });
+
+            try
+            {
+                return Results.Ok(await spotify.SearchAsync(query, type, cancellationToken));
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { message = exception.Message });
+            }
+            catch (SpotifyAPI.Web.APIException exception)
+            {
+                var status = (int?)exception.Response?.StatusCode;
+                var message = status switch
+                {
+                    401 => "Spotify login has expired or is invalid. Complete Spotify login again.",
+                    403 => "Spotify search is not available for this app or account. Check Spotify developer app access, or enter an ID manually.",
+                    429 => "Spotify is rate limiting searches. Wait before trying again, or enter an ID manually.",
+                    _ => "Spotify search is temporarily unavailable. Try again, or enter an ID manually."
+                };
+                return Results.Json(new { message }, statusCode: status == 429 ? 429 : StatusCodes.Status502BadGateway);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                return Results.Json(new { message = "Could not connect to Spotify search. Check the connection and Spotify login, or enter an ID manually." },
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
         }
 
         /// <summary>Editable Spotify configuration; a null secret preserves its current value.</summary>

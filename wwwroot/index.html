@@ -164,6 +164,8 @@
           </div>
 
           <div id="spotifyFields" class="source-fields" hidden>
+            <button id="openSpotifySearch" class="button button-secondary" type="button">Search Spotify</button>
+            <span id="spotifySelectionMessage" class="form-message" role="status" aria-live="polite"></span>
             <div class="field-row">
               <div class="field-group">
                 <label for="spotifyType">Spotify item</label>
@@ -209,6 +211,32 @@
       <span id="selectedMediaCount" class="field-note">0 selected</span>
       <button id="addSelectedMedia" class="button button-primary" type="button">Add selected</button>
     </div>
+  </dialog>
+
+  <dialog id="spotifySearchDialog" class="media-dialog" aria-labelledby="spotifySearchTitle">
+    <div class="dialog-header">
+      <h2 id="spotifySearchTitle">Search Spotify</h2>
+      <button id="closeSpotifySearch" class="icon-button" type="button" title="Close search" aria-label="Close Spotify search">×</button>
+    </div>
+    <form id="spotifySearchForm">
+      <div class="spotify-search-controls">
+        <div class="field-group">
+          <label for="spotifySearchType">Search for</label>
+          <select id="spotifySearchType">
+            <option value="track">Tracks</option>
+            <option value="album">Albums</option>
+            <option value="playlist">Playlists</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="spotifySearchQuery">Title, artist, or playlist</label>
+          <input id="spotifySearchQuery" type="search" maxlength="200" autocomplete="off" required>
+        </div>
+        <button id="spotifySearchButton" class="button button-primary" type="submit">Search</button>
+      </div>
+    </form>
+    <p id="spotifySearchStatus" class="form-message spotify-search-status" role="status" aria-live="polite"></p>
+    <div id="spotifySearchResults" class="spotify-search-results" aria-busy="false"></div>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

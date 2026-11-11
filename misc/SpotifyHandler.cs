@@ -76,9 +76,9 @@
             }
         }
 
-        private async Task ExecuteAsync(Func<SpotifyClient, Task> action)
+        private async Task ExecuteAsync(Func<SpotifyClient, Task> action, CancellationToken cancellationToken = default)
         {
-            await _operationLock.WaitAsync();
+            await _operationLock.WaitAsync(cancellationToken);
             try
             {
                 if (!_config.Enable) throw new InvalidOperationException("Spotify is disabled.");
@@ -90,6 +90,53 @@
                 _operationLock.Release();
             }
         }
+
+        public async Task<IReadOnlyList<SpotifySearchResult>> SearchAsync(string query, string type, CancellationToken cancellationToken = default)
+        {
+            var searchType = type switch
+            {
+                "track" => SearchRequest.Types.Track,
+                "album" => SearchRequest.Types.Album,
+                "playlist" => SearchRequest.Types.Playlist,
+                _ => throw new ArgumentException("Choose tracks, albums, or playlists.", nameof(type))
+            };
+            var results = new List<SpotifySearchResult>();
+            await ExecuteAsync(async spotify =>
+            {
+                var response = await spotify.Search.Item(new SearchRequest(searchType, query) { Limit = 10 }, cancellationToken);
+                if (type == "track")
+                {
+                    foreach (var track in response.Tracks?.Items ?? [])
+                    {
+                        if (track?.Id == null) continue;
+                        results.Add(new(track.Id, track.Name, type, string.Join(", ", track.Artists.Select(artist => artist.Name)),
+                            track.Album?.Images?.LastOrDefault()?.Url));
+                    }
+                }
+                else if (type == "album")
+                {
+                    foreach (var album in response.Albums?.Items ?? [])
+                    {
+                        if (album?.Id == null) continue;
+                        results.Add(new(album.Id, album.Name, type, string.Join(", ", album.Artists.Select(artist => artist.Name)),
+                            album.Images?.LastOrDefault()?.Url));
+                    }
+                }
+                else
+                {
+                    foreach (var playlist in response.Playlists?.Items ?? [])
+                    {
+                        if (playlist?.Id == null) continue;
+                        results.Add(new(playlist.Id, playlist.Name ?? "Untitled playlist", type, playlist.Owner?.DisplayName ?? playlist.Owner?.Id ?? "",
+                            playlist.Images?.LastOrDefault()?.Url));
+                    }
+                }
+            }, cancellationToken);
+            return results;
+        }
+
+        /// <summary>A Spotify catalog match suitable for assigning to a tag.</summary>
+        public sealed record SpotifySearchResult(string Id, string Name, string Type, string Subtitle, string? ImageUrl);
 
         private async Task<string> GetDeviceIdAsync(SpotifyClient spotify, bool activate = false)
         {
