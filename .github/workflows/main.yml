@@ -13,30 +13,14 @@ jobs:
           - kind: linux
             os: ubuntu-latest
             target: linux-x64
-          # Linux 32-bit
-          - kind: linux
-            os: ubuntu-latest
-            target: linux-x86
           # Linux ARM 64-bit
           - kind: linux-arm
             os: ubuntu-latest
             target: linux-arm64
-          # Linux ARM 32-bit
-          - kind: linux-arm
-            os: ubuntu-latest
-            target: linux-arm
           # Windows 64-bit
           - kind: windows
             os: windows-latest
             target: win-x64
-          # Windows 32-bit
-          - kind: windows
-            os: windows-latest
-            target: win-x86
-          # macOS 64-bit
-          - kind: macOS
-            os: macos-latest
-            target: osx-x64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
