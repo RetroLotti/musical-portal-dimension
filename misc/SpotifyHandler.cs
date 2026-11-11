@@ -168,6 +168,14 @@
             await PauseAsync();
         }
 
+        public async Task ResumeAsync()
+        {
+            await CheckToken();
+
+            var spotify = new SpotifyClient(_accessToken);
+            await spotify.Player.ResumePlayback();
+        }
+
         private static async Task<SpotifyTokenResponse?> RefreshTokenAsync(string clientId, string refreshToken)
         {
             using var httpClient = new HttpClient();

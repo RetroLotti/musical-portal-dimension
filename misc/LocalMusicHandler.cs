@@ -30,5 +30,10 @@
         {
             Player.Pause();
         }
+
+        public void Resume()
+        {
+            Player.Play();
+        }
     }
 }

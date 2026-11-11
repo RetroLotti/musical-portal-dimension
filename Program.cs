@@ -16,6 +16,10 @@
 
         private static Config _config = null!;
         private static MusicConfig _musicConfig = null!;
+        private static string? _currentTagUid;
+        private static SourceTypes? _currentPlaybackSource;
+        private static string? _pausedTagUid;
+        private static SourceTypes? _pausedPlaybackSource;
 
         private static async Task Main(string[] _)
         {
@@ -97,26 +101,54 @@
         // ReSharper disable once AsyncVoidMethod
         private static async void PortalOnLegoTagEvent(object? sender, LegoTagEventArgs e)
         {
+            var uid = BitConverter.ToString(e.CardUid);
+
             if (!e.Present)
             {
-                if (!_portalHandler.IsTransferring) return;
+                if (!_portalHandler.IsTransferring || !string.Equals(uid, _currentTagUid, StringComparison.OrdinalIgnoreCase)) return;
 
                 _portalHandler.IsTransferring = false;
-                if (_config.Enable)
+                _pausedTagUid = _currentTagUid;
+                _pausedPlaybackSource = _currentPlaybackSource;
+                if (_pausedPlaybackSource == SourceTypes.Spotify)
                 {
-                    await _spotifyHandler.StopAsync();
+                    await _spotifyHandler.PauseAsync();
                 }
-                else
+                else if (_pausedPlaybackSource == SourceTypes.Local)
                 {
-                    _localMusicHandler.Stop();
+                    _localMusicHandler.Pause();
                 }
-                Console.WriteLine("Playback stopped!");
+                Console.WriteLine("Playback paused!");
                 return;
             }
 
-            var uid = BitConverter.ToString(e.CardUid);
-
             Console.WriteLine($"{uid} | {e.LegoTag?.GetType().Name} | {e.LegoTag?.Name}");
+
+            if (_pausedTagUid != null)
+            {
+                if (string.Equals(uid, _pausedTagUid, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (_pausedPlaybackSource == SourceTypes.Spotify)
+                    {
+                        await _spotifyHandler.ResumeAsync();
+                    }
+                    else if (_pausedPlaybackSource == SourceTypes.Local)
+                    {
+                        _localMusicHandler.Resume();
+                    }
+
+                    _portalHandler.IsTransferring = true;
+                    _pausedTagUid = null;
+                    _pausedPlaybackSource = null;
+                    Console.WriteLine("Playback resumed!");
+                    return;
+                }
+
+                _pausedTagUid = null;
+                _pausedPlaybackSource = null;
+                _currentTagUid = null;
+                _currentPlaybackSource = null;
+            }
 
             // check if tag is control tag
             if (_config.Enable && _musicConfig.ControlTags.TryGetValue(uid, out var value))
@@ -157,6 +189,8 @@
                     // play first song in the list for now (or the album or playlist)
                     await _spotifyHandler.PlayAsync(song.SpotifyType.ToString()!.ToLower(), song.SpotifyId!);
                     _portalHandler.IsTransferring = true;
+                    _currentTagUid = uid;
+                    _currentPlaybackSource = SourceTypes.Spotify;
                     Console.WriteLine($"Now playing: {song.Name}");
                     break;
                 case SourceTypes.Local:
@@ -176,6 +210,8 @@
 
                     _localMusicHandler.Play(resolvedLocalPath);
                     _portalHandler.IsTransferring = true;
+                    _currentTagUid = uid;
+                    _currentPlaybackSource = SourceTypes.Local;
                     Console.WriteLine($"Now playing: {song.Name}");
                     break;
                 case SourceTypes.Other:
