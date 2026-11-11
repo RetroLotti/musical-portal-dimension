@@ -15,7 +15,10 @@
         {
             Core.Initialize();
 
-            Library = new LibVLC();
+            var audioOutput = Environment.GetEnvironmentVariable("MUSICDIMENSION_AUDIO_OUTPUT");
+            Library = string.IsNullOrWhiteSpace(audioOutput)
+                ? new LibVLC()
+                : new LibVLC($"--aout={audioOutput}");
             Player = new MediaPlayer(Library);
             Player.EndReached += (_, _) => _ = Task.Run(PlayNextTrack);
         }
@@ -63,6 +66,28 @@
         public void Resume()
         {
             Player.Play();
+        }
+
+        public void NextTrack()
+        {
+            lock (_playlistLock)
+            {
+                if (_currentTrackIndex < 0 || _currentTrackIndex + 1 >= _tracks.Count) return;
+
+                _currentTrackIndex++;
+                PlayCurrentTrack();
+            }
+        }
+
+        public void PreviousTrack()
+        {
+            lock (_playlistLock)
+            {
+                if (_currentTrackIndex <= 0) return;
+
+                _currentTrackIndex--;
+                PlayCurrentTrack();
+            }
         }
 
         private List<string> ReadPlaylist(string playlistPath)
@@ -135,13 +160,7 @@
 
         private void PlayNextTrack()
         {
-            lock (_playlistLock)
-            {
-                if (_currentTrackIndex < 0 || _currentTrackIndex + 1 >= _tracks.Count) return;
-
-                _currentTrackIndex++;
-                PlayCurrentTrack();
-            }
+            NextTrack();
         }
     }
 }

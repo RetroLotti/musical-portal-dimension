@@ -18,7 +18,7 @@ namespace MusicDimension.misc
             ".aac", ".flac", ".m4a", ".mp3", ".ogg", ".wav", ".wma", ".m3u", ".m3u8"
         };
 
-        public static WebApplication Create(MusicConfigStore store, ReaderCaptureState readerCapture, bool spotifyEnabled, Func<bool> isReaderConnected)
+        public static WebApplication Create(MusicConfigStore store, ReaderCaptureState readerCapture, bool spotifyEnabled, Func<bool> isReaderConnected, string listenUrl)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -26,7 +26,7 @@ namespace MusicDimension.misc
                 ContentRootPath = Environment.CurrentDirectory,
                 WebRootPath = Path.Combine(Environment.CurrentDirectory, "wwwroot")
             });
-            builder.WebHost.UseUrls("http://127.0.0.1:5080");
+            builder.WebHost.UseUrls(listenUrl);
             builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = MaximumUploadSize);
             builder.Services.ConfigureHttpJsonOptions(options =>
                 options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
@@ -45,13 +45,42 @@ namespace MusicDimension.misc
                 readerCapture.BeginCapture();
                 return Results.Accepted();
             });
+            app.MapPut("/api/control-tags", (TrackControlTagsRequest request) => UpdateTrackControlTags(request, store));
 
             app.MapGet("/api/media", () => Results.Ok(ListMediaFiles()));
             app.MapPost("/api/media", UploadMediaAsync).DisableAntiforgery();
             app.MapPost("/api/tags", (CreateTagRequest request) => CreateTag(request, store, spotifyEnabled));
             app.MapPut("/api/tags/{uid}", (string uid, CreateTagRequest request) => UpdateTag(uid, request, store, spotifyEnabled));
+            app.MapDelete("/api/tags/{uid}", (string uid) => DeleteTag(uid, store));
 
             return app;
+        }
+
+        private static IResult UpdateTrackControlTags(TrackControlTagsRequest request, MusicConfigStore store)
+        {
+            var forwardUid = NormalizeUid(request.ForwardUid);
+            var rewindUid = NormalizeUid(request.RewindUid);
+            if ((!string.IsNullOrWhiteSpace(request.ForwardUid) && forwardUid == null)
+                || (!string.IsNullOrWhiteSpace(request.RewindUid) && rewindUid == null))
+            {
+                return Results.BadRequest(new { message = "Enter valid hexadecimal tag UIDs." });
+            }
+
+            if (forwardUid != null && string.Equals(forwardUid, rewindUid, StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new { message = "Forward and rewind must use different tags." });
+            }
+
+            try
+            {
+                store.SetTrackControlTags(forwardUid, rewindUid);
+            }
+            catch (Exception exception)
+            {
+                return Results.Problem($"Could not save music.json: {exception.Message}");
+            }
+
+            return Results.Ok();
         }
 
         private static IResult CreateTag(CreateTagRequest request, MusicConfigStore store, bool spotifyEnabled)
@@ -92,6 +121,23 @@ namespace MusicDimension.misc
             }
 
             return Results.Ok(new { uid });
+        }
+
+        private static IResult DeleteTag(string routeUid, MusicConfigStore store)
+        {
+            var uid = NormalizeUid(routeUid);
+            if (uid == null) return Results.BadRequest(new { message = "Enter a valid hexadecimal tag UID." });
+
+            try
+            {
+                if (!store.TryDeleteTag(uid)) return Results.NotFound(new { message = "The tag no longer exists." });
+            }
+            catch (Exception exception)
+            {
+                return Results.Problem($"Could not save music.json: {exception.Message}");
+            }
+
+            return Results.NoContent();
         }
 
         private static Tag? BuildTag(CreateTagRequest request, bool spotifyEnabled, out string? error)
@@ -272,5 +318,6 @@ namespace MusicDimension.misc
     }
 
     public sealed record CreateTagRequest(string Uid, string Name, SourceTypes Type, List<string>? Paths, SpotifyTypes? SpotifyType, string? SpotifyId);
+    public sealed record TrackControlTagsRequest(string? ForwardUid, string? RewindUid);
     public sealed record MediaFileInfo(string Name, string Path, string Extension, long Size);
 }

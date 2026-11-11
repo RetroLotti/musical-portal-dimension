@@ -33,6 +33,33 @@
       </button>
     </section>
 
+    <section class="control-section" aria-labelledby="controlHeading">
+      <div class="control-heading">
+        <p class="eyebrow">PLAYBACK CONTROLS</p>
+        <h2 id="controlHeading">Forward &amp; rewind tags</h2>
+      </div>
+      <div class="control-fields">
+        <div class="field-group">
+          <label for="forwardUid">Forward to next track</label>
+          <div class="control-uid-row">
+            <input id="forwardUid" type="text" placeholder="Scan or enter tag UID" autocomplete="off">
+            <button id="captureForwardButton" class="button button-secondary" type="button">Scan</button>
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="rewindUid">Rewind to previous track</label>
+          <div class="control-uid-row">
+            <input id="rewindUid" type="text" placeholder="Scan or enter tag UID" autocomplete="off">
+            <button id="captureRewindButton" class="button button-secondary" type="button">Scan</button>
+          </div>
+        </div>
+      </div>
+      <div class="control-footer">
+        <span id="controlMessage" class="form-message" role="status" aria-live="polite"></span>
+        <button id="saveControlsButton" class="button button-primary" type="button">Save controls</button>
+      </div>
+    </section>
+
     <section class="workspace" aria-label="Music tag manager">
       <section class="library-section">
         <div class="section-heading">

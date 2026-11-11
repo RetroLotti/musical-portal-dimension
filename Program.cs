@@ -45,9 +45,10 @@
             // init handler
             Console.WriteLine("Initializing LEGO Dimensions Portal...");
             _portalHandler = new PortalHandler();
-            var app = MusicWebHost.Create(_musicStore, ReaderCapture, _config.Enable, () => _portalHandler.IsConnected);
+            var listenUrl = Environment.GetEnvironmentVariable("MUSICDIMENSION_WEB_URL") ?? "http://127.0.0.1:5080";
+            var app = MusicWebHost.Create(_musicStore, ReaderCapture, _config.Enable, () => _portalHandler.IsConnected, listenUrl);
             await app.StartAsync();
-            Console.WriteLine("Music manager: http://127.0.0.1:5080");
+            Console.WriteLine($"Music manager: {listenUrl}");
 
             if (_config.Enable)
             {
@@ -167,20 +168,28 @@
             }
 
             // check if tag is control tag
-            if (_config.Enable && _musicStore.Snapshot().ControlTags.TryGetValue(uid, out var value))
+            if (_musicStore.Snapshot().ControlTags.TryGetValue(uid, out var value))
             {
                 switch (value)
                 {
-                    
                     case "next":
-                        await _spotifyHandler.NextTrackAsync();
-                        break;
+                    case "forward":
+                        await SkipTrackAsync(forward: true);
+                        return;
                     case "previous":
-                        await _spotifyHandler.PreviousTrackAsync();
-                        break;
+                    case "rewind":
+                        await SkipTrackAsync(forward: false);
+                        return;
+                    case "play":
+                        await ResumePlaybackAsync();
+                        return;
+                    case "stop":
+                    case "pause":
+                        await PausePlaybackAsync();
+                        return;
                     default:
-                        await _spotifyHandler.PauseAsync();
-                        break;
+                        Console.WriteLine($"Unknown control action '{value}' for tag {uid}.");
+                        return;
                 }
             }
 
@@ -241,6 +250,48 @@
                 default:
                     Console.WriteLine("Given source type does not exist.");
                     break;
+            }
+        }
+
+        private static async Task SkipTrackAsync(bool forward)
+        {
+            if (_currentPlaybackSource == SourceTypes.Spotify && _config.Enable)
+            {
+                if (forward) await _spotifyHandler.NextTrackAsync();
+                else await _spotifyHandler.PreviousTrackAsync();
+            }
+            else if (_currentPlaybackSource == SourceTypes.Local)
+            {
+                if (forward) _localMusicHandler.NextTrack();
+                else _localMusicHandler.PreviousTrack();
+            }
+            else
+            {
+                Console.WriteLine("No active playlist to control.");
+            }
+        }
+
+        private static async Task PausePlaybackAsync()
+        {
+            if (_currentPlaybackSource == SourceTypes.Spotify && _config.Enable)
+            {
+                await _spotifyHandler.PauseAsync();
+            }
+            else if (_currentPlaybackSource == SourceTypes.Local)
+            {
+                _localMusicHandler.Pause();
+            }
+        }
+
+        private static async Task ResumePlaybackAsync()
+        {
+            if (_currentPlaybackSource == SourceTypes.Spotify && _config.Enable)
+            {
+                await _spotifyHandler.ResumeAsync();
+            }
+            else if (_currentPlaybackSource == SourceTypes.Local)
+            {
+                _localMusicHandler.Resume();
             }
         }
 

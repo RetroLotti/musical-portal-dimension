@@ -48,7 +48,7 @@ On Raspberry Pi OS, install the native libraries and create the service account:
 
 ```sh
 sudo apt update
-sudo apt install -y libusb-1.0-0 libusb-1.0-0-dev libvlc5 vlc-plugin-base
+sudo apt install -y libusb-1.0-0 libusb-1.0-0-dev libvlc5 libvlc-dev vlc-plugin-base
 getent group plugdev >/dev/null || sudo groupadd --system plugdev
 sudo useradd --system --user-group --home-dir /var/lib/musicdimension --create-home --shell /usr/sbin/nologin musicdimension
 sudo usermod -aG plugdev,audio musicdimension
@@ -75,7 +75,7 @@ systemctl status musicdimension
 journalctl -u musicdimension -f
 ```
 
-The web manager listens only on `127.0.0.1:5080`. To open it from another computer, create an SSH tunnel with `ssh -L 5080:127.0.0.1:5080 pi@raspberrypi.local`, then browse to `http://127.0.0.1:5080` on that computer.
+The systemd service selects VLC's ALSA output directly so it does not depend on a logged-in PulseAudio session. It listens on all Pi network interfaces at port `5080`; from another device on the same trusted LAN, open `http://<pi-ip-address>:5080` (find the address with `hostname -I`). The web manager currently has no login, so do not forward this port through your router or expose it to the public internet. For a loopback-only listener, remove the `MUSICDIMENSION_WEB_URL` line from the service file.
 
 The LEGO Dimensions Toy Pad rule uses vendor/product `0e6f:0241` and grants access to the `plugdev` group. Replug the portal or reboot after installing it. This rule follows the identifier documented by the [LegoDimensions Linux driver instructions](https://github.com/Ellerbach/LegoDimensions/blob/main/linux-driver-rules/99-lego-dimensions.rules).
 

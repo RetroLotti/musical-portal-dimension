@@ -76,9 +76,25 @@ function renderTags() {
     edit.setAttribute("aria-label", `Edit ${tag.name || "tag"}`);
     edit.disabled = source === "spotify" && !spotifyEnabled;
     edit.addEventListener("click", () => editTag(tag).catch(error => showToast(error.message)));
-    row.append(info, kind, edit);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "tag-delete";
+    remove.textContent = "×";
+    remove.title = "Delete registered tag";
+    remove.setAttribute("aria-label", `Delete ${tag.name || "tag"}`);
+    remove.addEventListener("click", () => deleteTag(tag).catch(error => showToast(error.message)));
+    row.append(info, kind, edit, remove);
     tagList.append(row);
   }
+}
+
+async function deleteTag(tag) {
+  if (!window.confirm(`Delete the registration for "${tag.name || tag.uid}"? Uploaded media files will be kept.`)) return;
+
+  await request(`/api/tags/${encodeURIComponent(tag.uid)}`, { method: "DELETE" });
+  if (editingUid === tag.uid) cancelEdit();
+  await refresh();
+  showToast("Tag registration deleted; media files kept");
 }
 
 async function loadMedia() {
@@ -93,6 +109,8 @@ async function refresh() {
   ]);
   library = nextLibrary;
   spotifyEnabled = status.spotifyEnabled;
+  document.querySelector("#forwardUid").value = configuredControlUid("next");
+  document.querySelector("#rewindUid").value = configuredControlUid("previous");
   renderTags();
   const readerStatus = document.querySelector("#readerStatus");
   const readerIndicator = document.querySelector("#readerIndicator");
@@ -105,6 +123,10 @@ async function refresh() {
   spotifyOption.hidden = !status.spotifyEnabled;
   if (!status.spotifyEnabled && sourceSelect.value === "spotify") sourceSelect.value = "local";
   updateSourceFields();
+}
+
+function configuredControlUid(action) {
+  return Object.entries(library.controlTags ?? {}).find(([, value]) => value.toLowerCase() === action)?.[0] ?? "";
 }
 
 function updateSourceFields() {
@@ -334,8 +356,8 @@ function queueAction(symbol, label, index, offset, disabled, remove = false) {
   return button;
 }
 
-async function captureUid() {
-  const button = document.querySelector("#captureButton");
+async function captureUid(input, button) {
+  const originalLabel = button.textContent;
   button.disabled = true;
   button.textContent = "Hold tag near reader";
   try {
@@ -344,9 +366,8 @@ async function captureUid() {
       await new Promise(resolve => setTimeout(resolve, 350));
       const state = await request("/api/reader/capture");
       if (state.capturedUid) {
-        const uidInput = document.querySelector("#uidInput");
-        uidInput.value = state.capturedUid;
-        uidInput.dispatchEvent(new Event("input", { bubbles: true }));
+        input.value = state.capturedUid;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
         showToast(`Captured ${state.capturedUid}`);
         return;
       }
@@ -357,7 +378,45 @@ async function captureUid() {
     showToast(error.message);
   } finally {
     button.disabled = false;
-    button.textContent = "Scan tag";
+    button.textContent = originalLabel;
+  }
+}
+
+async function saveControlTags() {
+  const forwardUid = document.querySelector("#forwardUid").value.trim();
+  const rewindUid = document.querySelector("#rewindUid").value.trim();
+  const normalizedForward = forwardUid ? normalizedUid(forwardUid) : "";
+  const normalizedRewind = rewindUid ? normalizedUid(rewindUid) : "";
+  const message = document.querySelector("#controlMessage");
+  const button = document.querySelector("#saveControlsButton");
+  message.textContent = "";
+  if ((forwardUid && !normalizedForward) || (rewindUid && !normalizedRewind)) {
+    message.textContent = "Enter valid hexadecimal tag UIDs.";
+    message.classList.add("error");
+    return;
+  }
+  if (normalizedForward && normalizedForward === normalizedRewind) {
+    message.textContent = "Forward and rewind must use different tags.";
+    message.classList.add("error");
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    await request("/api/control-tags", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ forwardUid: normalizedForward, rewindUid: normalizedRewind })
+    });
+    message.classList.remove("error");
+    message.textContent = "Controls saved";
+    await refresh();
+    showToast("Playback control tags saved");
+  } catch (error) {
+    message.classList.add("error");
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -439,7 +498,10 @@ async function createTag(event) {
 
 sourceSelect.addEventListener("change", updateSourceFields);
 document.querySelector("#searchInput").addEventListener("input", renderTags);
-document.querySelector("#captureButton").addEventListener("click", captureUid);
+document.querySelector("#captureButton").addEventListener("click", event => captureUid(document.querySelector("#uidInput"), event.currentTarget));
+document.querySelector("#captureForwardButton").addEventListener("click", event => captureUid(document.querySelector("#forwardUid"), event.currentTarget));
+document.querySelector("#captureRewindButton").addEventListener("click", event => captureUid(document.querySelector("#rewindUid"), event.currentTarget));
+document.querySelector("#saveControlsButton").addEventListener("click", saveControlTags);
 document.querySelector("#mediaUpload").addEventListener("change", uploadSelectedFiles);
 document.querySelector("#existingMediaButton").addEventListener("click", openMediaDialog);
 document.querySelector("#mediaSearch").addEventListener("input", renderAvailableMedia);

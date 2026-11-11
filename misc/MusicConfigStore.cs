@@ -88,6 +88,58 @@ namespace MusicDimension.misc
             }
         }
 
+        public bool TryDeleteTag(string uid)
+        {
+            lock (_sync)
+            {
+                var index = _config.RegisteredTags.FindIndex(item => string.Equals(item.Uid, uid, StringComparison.OrdinalIgnoreCase));
+                if (index < 0) return false;
+
+                var removedTag = _config.RegisteredTags[index];
+                _config.RegisteredTags.RemoveAt(index);
+                try
+                {
+                    Save();
+                    return true;
+                }
+                catch
+                {
+                    _config.RegisteredTags.Insert(index, removedTag);
+                    throw;
+                }
+            }
+        }
+
+        public void SetTrackControlTags(string? forwardUid, string? rewindUid)
+        {
+            lock (_sync)
+            {
+                var previous = _config.ControlTags;
+                var configuredUids = new HashSet<string>(
+                    new[] { forwardUid, rewindUid }.Where(uid => uid != null)!,
+                    StringComparer.OrdinalIgnoreCase);
+                var updated = previous
+                    .Where(pair => !string.Equals(pair.Value, "next", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(pair.Value, "previous", StringComparison.OrdinalIgnoreCase)
+                        && !configuredUids.Contains(pair.Key))
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+
+                if (forwardUid != null) updated[forwardUid] = "next";
+                if (rewindUid != null) updated[rewindUid] = "previous";
+
+                _config.ControlTags = updated;
+                try
+                {
+                    Save();
+                }
+                catch
+                {
+                    _config.ControlTags = previous;
+                    throw;
+                }
+            }
+        }
+
         private void Save()
         {
             var temporaryPath = _filePath + ".tmp";

@@ -36,6 +36,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libusb-1.0-0 \
     libusb-1.0-0-dev \
     libvlc5 \
+    libvlc-dev \
     python3 \
     tar \
     vlc-plugin-base
