@@ -52,7 +52,7 @@
         <div class="section-heading editor-heading">
           <div>
             <p class="eyebrow">NEW ENTRY</p>
-            <h2>Register a tag</h2>
+            <h2 id="editorTitle">Register a tag</h2>
           </div>
           <span class="step-number">01</span>
         </div>
@@ -83,6 +83,7 @@
             <div class="upload-row">
               <label class="upload-button" for="mediaUpload">＋ Add media files</label>
               <input id="mediaUpload" class="visually-hidden" type="file" accept="audio/*,.m3u,.m3u8" multiple>
+              <button id="existingMediaButton" class="upload-button" type="button">Browse existing</button>
               <span id="uploadStatus" class="field-note">Scan or enter the UID first. Audio and M3U files supported.</span>
             </div>
             <div class="queue-area">
@@ -113,12 +114,34 @@
 
           <div class="form-footer">
             <span id="formMessage" class="form-message" role="status" aria-live="polite"></span>
-            <button id="saveButton" class="button button-primary" type="submit">Add tag <span aria-hidden="true">↗</span></button>
+            <div class="form-actions">
+              <button id="cancelEditButton" class="button button-secondary" type="button" hidden>Cancel</button>
+              <button id="saveButton" class="button button-primary" type="submit"><span id="saveLabel">Add tag</span> <span aria-hidden="true">↗</span></button>
+            </div>
           </div>
         </form>
       </section>
     </section>
   </main>
+
+  <dialog id="mediaDialog" class="media-dialog" aria-labelledby="mediaDialogTitle">
+    <div class="dialog-header">
+      <div>
+        <p class="eyebrow">MEDIA LIBRARY</p>
+        <h2 id="mediaDialogTitle">Add existing files</h2>
+      </div>
+      <button id="closeMediaDialog" class="icon-button" type="button" title="Close dialog" aria-label="Close dialog">×</button>
+    </div>
+    <label class="search-box dialog-search">
+      <span aria-hidden="true">⌕</span>
+      <input id="mediaSearch" type="search" placeholder="Filter by file or folder" autocomplete="off">
+    </label>
+    <div id="availableMediaList" class="available-media-list" aria-live="polite"></div>
+    <div class="dialog-footer">
+      <span id="selectedMediaCount" class="field-note">0 selected</span>
+      <button id="addSelectedMedia" class="button button-primary" type="button">Add selected</button>
+    </div>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>

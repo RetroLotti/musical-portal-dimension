@@ -7,10 +7,16 @@ const localFields = document.querySelector("#localFields");
 const spotifyFields = document.querySelector("#spotifyFields");
 const formMessage = document.querySelector("#formMessage");
 const toast = document.querySelector("#toast");
+const mediaDialog = document.querySelector("#mediaDialog");
+const availableMediaList = document.querySelector("#availableMediaList");
 
 let library = { registeredTags: [] };
+let mediaFiles = [];
 let uploadQueue = [];
 let queueUid = null;
+let editingUid = null;
+let spotifyEnabled = false;
+let selectedMediaPaths = new Set();
 let toastTimer;
 
 async function request(url, options = {}) {
@@ -62,13 +68,22 @@ function renderTags() {
     const source = tag.songs?.[0]?.type ?? "local";
     kind.className = `tag-kind${source === "spotify" ? " spotify" : ""}`;
     kind.textContent = source;
-    row.append(info, kind);
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "tag-edit";
+    edit.textContent = "✎";
+    edit.title = "Edit tag and playlist";
+    edit.setAttribute("aria-label", `Edit ${tag.name || "tag"}`);
+    edit.disabled = source === "spotify" && !spotifyEnabled;
+    edit.addEventListener("click", () => editTag(tag).catch(error => showToast(error.message)));
+    row.append(info, kind, edit);
     tagList.append(row);
   }
 }
 
 async function loadMedia() {
-  return Promise.resolve();
+  mediaFiles = await request("/api/media");
+  return mediaFiles;
 }
 
 async function refresh() {
@@ -77,6 +92,7 @@ async function refresh() {
     request("/api/status")
   ]);
   library = nextLibrary;
+  spotifyEnabled = status.spotifyEnabled;
   renderTags();
   const readerStatus = document.querySelector("#readerStatus");
   const readerIndicator = document.querySelector("#readerIndicator");
@@ -96,6 +112,156 @@ function updateSourceFields() {
   localFields.hidden = !isLocal;
   spotifyFields.hidden = isLocal;
   document.querySelector("#spotifyId").required = !isLocal;
+}
+
+function normalizedMediaPath(path) {
+  return path.replace(/[\\/]/g, "#").toLowerCase();
+}
+
+function renderAvailableMedia() {
+  const query = document.querySelector("#mediaSearch").value.trim().toLowerCase();
+  const files = mediaFiles.filter(file => `${file.name} ${file.path}`.toLowerCase().includes(query));
+  availableMediaList.replaceChildren();
+
+  if (files.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "dialog-empty";
+    empty.textContent = query ? "No matching files" : "No media files found under media/";
+    availableMediaList.append(empty);
+    return;
+  }
+
+  for (const file of files) {
+    const label = document.createElement("label");
+    label.className = "available-media-item";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedMediaPaths.has(file.path);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedMediaPaths.add(file.path);
+      else selectedMediaPaths.delete(file.path);
+      updateSelectedMediaCount();
+    });
+
+    const copy = document.createElement("span");
+    copy.className = "available-media-copy";
+    const name = document.createElement("span");
+    name.className = "available-media-name";
+    name.textContent = file.name;
+    const path = document.createElement("span");
+    path.className = "available-media-path";
+    path.textContent = file.path.replace(/^media#/, "").replace(/#/g, " /");
+    copy.append(name, path);
+    label.append(checkbox, copy);
+    availableMediaList.append(label);
+  }
+
+  updateSelectedMediaCount();
+}
+
+function updateSelectedMediaCount() {
+  document.querySelector("#selectedMediaCount").textContent = `${selectedMediaPaths.size} selected`;
+}
+
+async function openMediaDialog() {
+  const uid = normalizedUid(document.querySelector("#uidInput").value);
+  if (!uid) {
+    showToast("Enter or scan the tag UID first.");
+    return;
+  }
+
+  try {
+    await loadMedia();
+    selectedMediaPaths = new Set();
+    document.querySelector("#mediaSearch").value = "";
+    renderAvailableMedia();
+    mediaDialog.showModal();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function addSelectedMedia() {
+  const uid = normalizedUid(document.querySelector("#uidInput").value);
+  if (!uid) {
+    showToast("Enter or scan the tag UID first.");
+    mediaDialog.close();
+    return;
+  }
+
+  if (queueUid && queueUid !== uid) uploadQueue = [];
+  queueUid = uid;
+  const existingPaths = new Set(uploadQueue.map(file => normalizedMediaPath(file.path)));
+  for (const file of mediaFiles.filter(item => selectedMediaPaths.has(item.path))) {
+    if (!existingPaths.has(normalizedMediaPath(file.path))) uploadQueue.push(file);
+  }
+
+  renderQueue();
+  mediaDialog.close();
+}
+
+async function editTag(tag) {
+  const songs = tag.songs ?? [];
+  const source = songs[0]?.type ?? "local";
+  if (source === "spotify" && !spotifyEnabled) {
+    showToast("Enable Spotify in config.json to edit Spotify tags.");
+    return;
+  }
+
+  if (source === "local") await loadMedia();
+  editingUid = tag.uid;
+  queueUid = tag.uid;
+  document.querySelector("#uidInput").value = tag.uid;
+  document.querySelector("#uidInput").readOnly = true;
+  document.querySelector("#nameInput").value = tag.name ?? "";
+  sourceSelect.value = source;
+  document.querySelector("#spotifyType").value = songs[0]?.spotifyType ?? "track";
+  document.querySelector("#spotifyId").value = songs[0]?.spotifyId ?? "";
+
+  if (source === "local") {
+    uploadQueue = songs.filter(song => song.path).map(song => {
+      const file = mediaFiles.find(item => normalizedMediaPath(item.path) === normalizedMediaPath(song.path));
+      if (file) return file;
+
+      const name = song.path.split(/[\\/#]/).at(-1);
+      return {
+        name: name || song.name || "Unknown media",
+        path: song.path,
+        extension: `.${(name || "").split(".").at(-1)}`,
+        size: 0
+      };
+    });
+  } else {
+    uploadQueue = [];
+  }
+
+  formMessage.textContent = "";
+  formMessage.classList.remove("error");
+  document.querySelector("#editorTitle").textContent = "Edit tag";
+  document.querySelector("#saveLabel").textContent = "Save changes";
+  document.querySelector("#cancelEditButton").hidden = false;
+  document.querySelector("#uploadStatus").textContent = source === "local"
+    ? "Add or browse files, then arrange playback order."
+    : "";
+  updateSourceFields();
+  renderQueue();
+  document.querySelector("#editorTitle").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function cancelEdit() {
+  editingUid = null;
+  queueUid = null;
+  uploadQueue = [];
+  document.querySelector("#tagForm").reset();
+  document.querySelector("#uidInput").readOnly = false;
+  document.querySelector("#editorTitle").textContent = "Register a tag";
+  document.querySelector("#saveLabel").textContent = "Add tag";
+  document.querySelector("#cancelEditButton").hidden = true;
+  document.querySelector("#formMessage").textContent = "";
+  document.querySelector("#formMessage").classList.remove("error");
+  document.querySelector("#uploadStatus").textContent = "Scan or enter the UID first. Audio and M3U files supported.";
+  updateSourceFields();
+  renderQueue();
 }
 
 function normalizedUid(value) {
@@ -252,20 +418,17 @@ async function createTag(event) {
   const submit = document.querySelector("#saveButton");
   submit.disabled = true;
   try {
-    await request("/api/tags", {
-      method: "POST",
+    const url = editingUid ? `/api/tags/${encodeURIComponent(editingUid)}` : "/api/tags";
+    await request(url, {
+      method: editingUid ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
     await refresh();
-    document.querySelector("#tagForm").reset();
-    uploadQueue = [];
-    queueUid = null;
-    renderQueue();
-    document.querySelector("#uploadStatus").textContent = "Scan or enter the UID first. Audio and M3U files supported.";
-    updateSourceFields();
-    formMessage.textContent = "Tag saved to music.json";
-    showToast("Tag registered");
+    const wasEditing = Boolean(editingUid);
+    cancelEdit();
+    formMessage.textContent = wasEditing ? "Tag and playlist updated" : "Tag saved to music.json";
+    showToast(wasEditing ? "Tag updated" : "Tag registered");
   } catch (error) {
     formMessage.textContent = error.message;
     formMessage.classList.add("error");
@@ -278,6 +441,11 @@ sourceSelect.addEventListener("change", updateSourceFields);
 document.querySelector("#searchInput").addEventListener("input", renderTags);
 document.querySelector("#captureButton").addEventListener("click", captureUid);
 document.querySelector("#mediaUpload").addEventListener("change", uploadSelectedFiles);
+document.querySelector("#existingMediaButton").addEventListener("click", openMediaDialog);
+document.querySelector("#mediaSearch").addEventListener("input", renderAvailableMedia);
+document.querySelector("#addSelectedMedia").addEventListener("click", addSelectedMedia);
+document.querySelector("#closeMediaDialog").addEventListener("click", () => mediaDialog.close());
+document.querySelector("#cancelEditButton").addEventListener("click", cancelEdit);
 document.querySelector("#uidInput").addEventListener("input", event => {
   const uid = normalizedUid(event.target.value);
   if (uploadQueue.length && uid !== queueUid) {

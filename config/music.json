@@ -201,6 +201,40 @@
           "spotifyId": null
         }
       ]
+    },
+    {
+      "uid": "04-F8-63-1A-A8-48-80",
+      "name": "Random Tag",
+      "songs": [
+        {
+          "name": "01 - Deine Lakaien - Intro",
+          "type": "local",
+          "path": "media#01 - Deine Lakaien - Intro.flac",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "02 - Deine Lakaien - Return",
+          "type": "local",
+          "path": "media#02 - Deine Lakaien - Return.flac",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "03 - Deine Lakaien - Kiss The Future",
+          "type": "local",
+          "path": "media#03 - Deine Lakaien - Kiss The Future.flac",
+          "spotifyType": null,
+          "spotifyId": null
+        },
+        {
+          "name": "04 - Deine Lakaien - My Shadows",
+          "type": "local",
+          "path": "media#04 - Deine Lakaien - My Shadows.flac",
+          "spotifyType": null,
+          "spotifyId": null
+        }
+      ]
     }
   ],
   "shortTags": {

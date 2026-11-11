@@ -66,6 +66,28 @@ namespace MusicDimension.misc
             }
         }
 
+        public bool TryUpdateTag(Tag tag)
+        {
+            lock (_sync)
+            {
+                var index = _config.RegisteredTags.FindIndex(item => string.Equals(item.Uid, tag.Uid, StringComparison.OrdinalIgnoreCase));
+                if (index < 0) return false;
+
+                var previous = _config.RegisteredTags[index];
+                _config.RegisteredTags[index] = tag;
+                try
+                {
+                    Save();
+                    return true;
+                }
+                catch
+                {
+                    _config.RegisteredTags[index] = previous;
+                    throw;
+                }
+            }
+        }
+
         private void Save()
         {
             var temporaryPath = _filePath + ".tmp";

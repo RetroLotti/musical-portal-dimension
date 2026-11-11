@@ -46,20 +46,68 @@ namespace MusicDimension.misc
                 return Results.Accepted();
             });
 
+            app.MapGet("/api/media", () => Results.Ok(ListMediaFiles()));
             app.MapPost("/api/media", UploadMediaAsync).DisableAntiforgery();
             app.MapPost("/api/tags", (CreateTagRequest request) => CreateTag(request, store, spotifyEnabled));
+            app.MapPut("/api/tags/{uid}", (string uid, CreateTagRequest request) => UpdateTag(uid, request, store, spotifyEnabled));
 
             return app;
         }
 
         private static IResult CreateTag(CreateTagRequest request, MusicConfigStore store, bool spotifyEnabled)
         {
-            var uid = NormalizeUid(request.Uid);
-            if (uid == null) return Results.BadRequest(new { message = "Enter a valid hexadecimal tag UID." });
-            if (string.IsNullOrWhiteSpace(request.Name)) return Results.BadRequest(new { message = "Enter a tag name." });
-            if (request.Type == SourceTypes.Spotify && !spotifyEnabled)
+            var tag = BuildTag(request, spotifyEnabled, out var error);
+            if (tag == null) return Results.BadRequest(new { message = error });
+
+            try
             {
-                return Results.BadRequest(new { message = "Spotify is disabled in config.json." });
+                if (!store.TryAddTag(tag)) return Results.Conflict(new { message = "A tag with this UID is already registered." });
+            }
+            catch (Exception exception)
+            {
+                return Results.Problem($"Could not save music.json: {exception.Message}");
+            }
+
+            return Results.Created($"/api/tags/{Uri.EscapeDataString(tag.Uid)}", new { uid = tag.Uid });
+        }
+
+        private static IResult UpdateTag(string routeUid, CreateTagRequest request, MusicConfigStore store, bool spotifyEnabled)
+        {
+            var uid = NormalizeUid(routeUid);
+            if (uid == null || !string.Equals(uid, NormalizeUid(request.Uid), StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new { message = "The tag UID cannot be changed while editing." });
+            }
+
+            var tag = BuildTag(request, spotifyEnabled, out var error);
+            if (tag == null) return Results.BadRequest(new { message = error });
+
+            try
+            {
+                if (!store.TryUpdateTag(tag)) return Results.NotFound(new { message = "The tag no longer exists." });
+            }
+            catch (Exception exception)
+            {
+                return Results.Problem($"Could not save music.json: {exception.Message}");
+            }
+
+            return Results.Ok(new { uid });
+        }
+
+        private static Tag? BuildTag(CreateTagRequest request, bool spotifyEnabled, out string? error)
+        {
+            error = null;
+            var uid = NormalizeUid(request.Uid);
+            if (uid == null)
+            {
+                error = "Enter a valid hexadecimal tag UID.";
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                error = "Enter a tag name.";
+                return null;
             }
 
             var songs = new List<Song>();
@@ -67,19 +115,25 @@ namespace MusicDimension.misc
             {
                 if (request.Paths == null || request.Paths.Count == 0)
                 {
-                    return Results.BadRequest(new { message = "Upload at least one audio or playlist file." });
+                    error = "Add at least one audio or playlist file.";
+                    return null;
                 }
 
                 foreach (var configuredPath in request.Paths)
                 {
-                    var relativePath = GetLocalMediaPath(configuredPath, uid);
+                    var relativePath = GetLocalMediaPath(configuredPath);
                     if (relativePath == null)
                     {
-                        return Results.BadRequest(new { message = "One or more files do not belong to this tag's upload folder." });
+                        error = "One or more files are outside the media folder.";
+                        return null;
                     }
 
                     var mediaPath = Path.GetFullPath(Path.Combine(GetMediaDirectory(), relativePath));
-                    if (!File.Exists(mediaPath)) return Results.BadRequest(new { message = $"The selected media file no longer exists: {Path.GetFileName(mediaPath)}" });
+                    if (!File.Exists(mediaPath))
+                    {
+                        error = $"The selected media file no longer exists: {Path.GetFileName(mediaPath)}";
+                        return null;
+                    }
 
                     songs.Add(new Song
                     {
@@ -91,9 +145,16 @@ namespace MusicDimension.misc
             }
             else if (request.Type == SourceTypes.Spotify)
             {
+                if (!spotifyEnabled)
+                {
+                    error = "Spotify is disabled in config.json.";
+                    return null;
+                }
+
                 if (request.SpotifyType == null || string.IsNullOrWhiteSpace(request.SpotifyId))
                 {
-                    return Results.BadRequest(new { message = "Choose a Spotify type and enter its ID." });
+                    error = "Choose a Spotify type and enter its ID.";
+                    return null;
                 }
 
                 songs.Add(new Song
@@ -106,20 +167,11 @@ namespace MusicDimension.misc
             }
             else
             {
-                return Results.BadRequest(new { message = "Choose Local or Spotify as the source." });
+                error = "Choose Local or Spotify as the source.";
+                return null;
             }
 
-            var tag = new Tag { Uid = uid, Name = request.Name.Trim(), Songs = songs };
-            try
-            {
-                if (!store.TryAddTag(tag)) return Results.Conflict(new { message = "A tag with this UID is already registered." });
-            }
-            catch (Exception exception)
-            {
-                return Results.Problem($"Could not save music.json: {exception.Message}");
-            }
-
-            return Results.Created($"/api/tags/{Uri.EscapeDataString(uid)}", new { uid });
+            return new Tag { Uid = uid, Name = request.Name.Trim(), Songs = songs };
         }
 
         private static async Task<IResult> UploadMediaAsync(HttpRequest request)
@@ -155,13 +207,30 @@ namespace MusicDimension.misc
             return Results.Created("/api/media", new MediaFileInfo(fileName, $"media#{uid}#{fileName}", extension, file.Length));
         }
 
-        private static string? GetLocalMediaPath(string? configuredPath, string uid)
+        private static List<MediaFileInfo> ListMediaFiles()
+        {
+            var directory = GetMediaDirectory();
+            Directory.CreateDirectory(directory);
+            var root = Path.GetFullPath(directory);
+            return Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                .Where(path => SupportedExtensions.Contains(Path.GetExtension(path)))
+                .Select(path => new FileInfo(path))
+                .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(file =>
+                {
+                    var relativePath = Path.GetRelativePath(root, file.FullName);
+                    var portablePath = relativePath.Replace(Path.DirectorySeparatorChar, '#').Replace(Path.AltDirectorySeparatorChar, '#');
+                    return new MediaFileInfo(file.Name, $"media#{portablePath}", Path.GetExtension(file.Name), file.Length);
+                })
+                .ToList();
+        }
+
+        private static string? GetLocalMediaPath(string? configuredPath)
         {
             if (string.IsNullOrWhiteSpace(configuredPath)) return null;
 
             var normalized = configuredPath.Replace('#', '/').Replace('\\', '/');
-            var expectedPrefix = $"media/{uid}/";
-            if (!normalized.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase)) return null;
+            if (!normalized.StartsWith("media/", StringComparison.OrdinalIgnoreCase)) return null;
             var name = normalized["media/".Length..];
             if (name.Split('/').Any(segment => segment is "" or "." or "..")) return null;
             if (!SupportedExtensions.Contains(Path.GetExtension(name))) return null;

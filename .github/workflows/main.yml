@@ -45,7 +45,7 @@ jobs:
       - name: Setup dotnet
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.x
+          dotnet-version: 10.x
 
       - name: Build
         shell: bash
@@ -53,7 +53,7 @@ jobs:
           tag=$(git describe --tags --abbrev=0)
           release_name="MusicDimension-$tag-${{ matrix.target }}"
           # Build everything
-          dotnet publish MusicDimension.csproj --framework net8.0 --runtime "${{ matrix.target }}" --configuration Release --output "$release_name" --self-contained true
+          dotnet publish MusicDimension.csproj --framework net10.0 --runtime "${{ matrix.target }}" --configuration Release --output "$release_name" --self-contained true
           # Pack files
           if [ "${{ matrix.target }}" == "win-x64" ]; then
             # Pack to zip for Windows
