@@ -7,7 +7,7 @@ jobs:
     name: Release
     strategy:
       matrix:
-        kind: ['linux', 'linux-arm', 'windows', 'macOS']
+        kind: ['linux', 'linux-arm', 'windows']
         include:
           # Linux 64-bit
           - kind: linux
