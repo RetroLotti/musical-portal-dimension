@@ -111,6 +111,13 @@ h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23px;
 .control-uid-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
 .control-uid-row .button { min-height: 38px; }
 .control-footer { display: grid; gap: 8px; justify-items: end; }
+.media-settings-form { display: grid; gap: 14px; padding-top: 20px; border-top: 1px solid var(--line); }
+.media-settings-form .control-heading h2 { font-size: 19px; }
+.media-limit-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) auto; align-items: end; gap: 14px; }
+.media-limit-row input[type="number"] { width: 100%; min-width: 0; height: 42px; padding: 0 11px; border: 1px solid #cfd9d0; border-radius: 5px; outline: 0; color: var(--ink); background: #fff; font-size: 13px; }
+.media-limit-row input[type="number"]:focus { border-color: var(--forest-light); box-shadow: 0 0 0 3px rgba(40, 93, 80, .11); }
+.media-limit-row .field-note { padding-bottom: 12px; line-height: 1.5; }
+#mediaSettingsMessage { overflow-wrap: anywhere; }
 .library-section, .editor-section { min-width: 0; padding: 28px 30px 32px; }
 .library-section { border-right: 1px solid var(--line); }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
@@ -244,6 +251,8 @@ input::placeholder { color: #9ba8a1; }
   .field-row { grid-template-columns: 1fr; }
   .control-fields { grid-template-columns: 1fr; }
   .control-section { padding: 19px 18px; }
+  .media-limit-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  .media-limit-row .field-note { padding-bottom: 0; }
   .spotify-settings { padding: 19px 18px; }
   .spotify-settings .control-footer { align-items: stretch; flex-direction: column; }
   .spotify-auth-header { flex-direction: column; }

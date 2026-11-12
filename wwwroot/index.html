@@ -85,6 +85,21 @@
         <span id="controlMessage" class="form-message" role="status" aria-live="polite"></span>
         <button id="saveControlsButton" class="button button-primary" type="button">Save controls</button>
       </div>
+      <form id="mediaSettingsForm" class="media-settings-form">
+        <div class="control-heading">
+          <p class="eyebrow">MEDIA LIBRARY</p>
+          <h2>Upload limit</h2>
+        </div>
+        <div class="media-limit-row">
+          <div class="field-group">
+            <label for="mediaMaxFileSizeMb">Maximum size per file (MiB)</label>
+            <input id="mediaMaxFileSizeMb" type="number" min="1" max="4096" step="1" required>
+          </div>
+          <p class="field-note">Allowed range: 1 to 4096 MiB. Applies to each uploaded file.</p>
+          <button id="saveMediaSettingsButton" class="button button-secondary" type="submit">Save upload limit</button>
+        </div>
+        <span id="mediaSettingsMessage" class="form-message" role="status" aria-live="polite"></span>
+      </form>
     </section>
 
     <section id="spotifyPanel" class="spotify-settings tab-panel" role="tabpanel" aria-labelledby="spotifyTab" tabindex="0" hidden>

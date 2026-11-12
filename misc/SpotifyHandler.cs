@@ -78,6 +78,32 @@
             }
         }
 
+        public async Task UpdateMediaMaxFileSizeMbAsync(int megabytes, string fileName)
+        {
+            if (megabytes is < 1 or > 4096)
+                throw new ArgumentOutOfRangeException(nameof(megabytes), "File size must be between 1 and 4096 MB.");
+
+            await _operationLock.WaitAsync();
+            try
+            {
+                var previous = _config.MediaMaxFileSizeMb;
+                _config.MediaMaxFileSizeMb = megabytes;
+                try
+                {
+                    await SaveJsonAsync(fileName, _config);
+                }
+                catch
+                {
+                    _config.MediaMaxFileSizeMb = previous;
+                    throw;
+                }
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
         public async Task<SpotifyAuthorizationStart> BeginAuthorizationAsync(string sessionId, CancellationToken cancellationToken = default)
         {
             await _operationLock.WaitAsync(cancellationToken);

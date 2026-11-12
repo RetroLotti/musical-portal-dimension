@@ -21,6 +21,7 @@ let queueDrag;
 let queueUid = null;
 let editingUid = null;
 let spotifyEnabled = false;
+let mediaMaxFileSizeMb = 512;
 let selectedMediaPaths = new Set();
 let toastTimer;
 
@@ -131,6 +132,44 @@ async function refresh() {
   spotifyOption.hidden = !status.spotifyEnabled;
   if (!status.spotifyEnabled && sourceSelect.value === "spotify") sourceSelect.value = "local";
   updateSourceFields();
+}
+
+async function loadMediaSettings() {
+  const settings = await request("/api/settings/media");
+  mediaMaxFileSizeMb = settings.maxFileSizeMb;
+  document.querySelector("#mediaMaxFileSizeMb").value = String(mediaMaxFileSizeMb);
+}
+
+async function saveMediaSettings(event) {
+  event.preventDefault();
+  const button = document.querySelector("#saveMediaSettingsButton");
+  const message = document.querySelector("#mediaSettingsMessage");
+  const input = document.querySelector("#mediaMaxFileSizeMb");
+  const value = Number(input.value);
+  message.textContent = "";
+  message.classList.remove("error");
+  if (!Number.isInteger(value) || value < 1 || value > 4096) {
+    message.textContent = "Choose a whole number between 1 and 4096 MiB.";
+    message.classList.add("error");
+    return;
+  }
+  button.disabled = true;
+  try {
+    const settings = await request("/api/settings/media", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ maxFileSizeMb: value })
+    });
+    mediaMaxFileSizeMb = settings.maxFileSizeMb;
+    input.value = String(mediaMaxFileSizeMb);
+    message.textContent = `Upload limit saved: ${mediaMaxFileSizeMb} MiB per file`;
+    document.querySelector("#uploadStatus").textContent = `Audio and M3U/M3U8 files supported. Maximum ${mediaMaxFileSizeMb} MiB each.`;
+  } catch (error) {
+    message.textContent = error.message;
+    message.classList.add("error");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function configuredControlUid(action) {
@@ -550,12 +589,25 @@ async function saveControlTags() {
 }
 
 async function uploadSelectedFiles(event) {
-  const files = [...event.target.files];
-  if (!files.length) return;
+  const selectedFiles = [...event.target.files];
+  if (!selectedFiles.length) return;
+  const files = selectedFiles.filter(file => file.size <= mediaMaxFileSizeMb * 1024 * 1024);
+  const rejectedFiles = selectedFiles.filter(file => file.size > mediaMaxFileSizeMb * 1024 * 1024);
   const uid = normalizedUid(document.querySelector("#uidInput").value);
   const status = document.querySelector("#uploadStatus");
+  const rejectedNames = rejectedFiles.slice(0, 3).map(file => file.name).join(", ");
+  const rejectedMore = rejectedFiles.length > 3 ? ` and ${rejectedFiles.length - 3} more` : "";
+  const rejectedMessage = rejectedFiles.length
+    ? `Skipped ${rejectedFiles.length} over-limit file${rejectedFiles.length === 1 ? "" : "s"}: ${rejectedNames}${rejectedMore}`
+    : "";
+  if (!files.length) {
+    status.textContent = `No files added. ${rejectedMessage}. Maximum file size is ${mediaMaxFileSizeMb} MiB.`;
+    showToast(rejectedMessage);
+    event.target.value = "";
+    return;
+  }
   if (!uid) {
-    status.textContent = "Enter or scan a valid UID before adding files.";
+    status.textContent = `Enter or scan a valid UID before adding files.${rejectedMessage ? ` ${rejectedMessage}.` : ""}`;
     event.target.value = "";
     return;
   }
@@ -573,8 +625,8 @@ async function uploadSelectedFiles(event) {
       renderQueue();
       status.textContent = `Uploading ${index + 1}/${files.length}`;
     }
-    status.textContent = `${files.length} file${files.length === 1 ? "" : "s"} uploaded`;
-    showToast(`${files.length} file${files.length === 1 ? "" : "s"} added to queue`);
+    status.textContent = `${files.length} file${files.length === 1 ? "" : "s"} uploaded${rejectedMessage ? `; ${rejectedMessage.toLowerCase()}` : ""}`;
+    showToast(`${files.length} file${files.length === 1 ? "" : "s"} added to queue${rejectedMessage ? `. ${rejectedMessage}` : ""}`);
   } catch (error) {
     status.textContent = "Upload failed";
     showToast(error.message);
@@ -1043,6 +1095,7 @@ for (const [index, tab] of sectionTabs.entries()) {
 }
 
 document.querySelector("#spotifySettingsForm").addEventListener("submit", saveSpotifySettings);
+document.querySelector("#mediaSettingsForm").addEventListener("submit", saveMediaSettings);
 sourceSelect.addEventListener("change", updateSourceFields);
 document.querySelector("#searchInput").addEventListener("input", renderTags);
 document.querySelector("#captureButton").addEventListener("click", event => captureUid(document.querySelector("#uidInput"), event.currentTarget));
@@ -1074,5 +1127,6 @@ document.querySelector("#tagForm").addEventListener("submit", createTag);
 document.querySelector("#refreshButton").addEventListener("click", () => refresh().catch(error => showToast(error.message)));
 
 refresh().catch(error => showToast(error.message));
+loadMediaSettings().catch(error => showToast(error.message));
 loadSpotifySettings().catch(error => showToast(error.message));
 renderQueue();

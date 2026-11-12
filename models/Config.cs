@@ -19,6 +19,9 @@
         [JsonProperty("receiver")]
         public ReceiverConfig Receiver { get; set; } = new();
 
+        [JsonProperty("mediaMaxFileSizeMb")]
+        public int MediaMaxFileSizeMb { get; set; } = 512;
+
         [JsonIgnore]
         public string TokenFileName { get; set; } = null!;
     }

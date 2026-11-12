@@ -12,7 +12,9 @@ namespace MusicDimension.misc
 
     public static partial class MusicWebHost
     {
-        private const long MaximumUploadSize = 512L * 1024 * 1024;
+        private const int MaximumUploadFileSizeMb = 4096;
+        private const long MultipartOverheadBytes = 1024 * 1024;
+        private static readonly long MaximumRequestSize = (long)MaximumUploadFileSizeMb * 1024 * 1024 + MultipartOverheadBytes;
         private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".aac", ".flac", ".m4a", ".mp3", ".ogg", ".wav", ".wma", ".m3u", ".m3u8"
@@ -27,7 +29,9 @@ namespace MusicDimension.misc
                 WebRootPath = Path.Combine(Environment.CurrentDirectory, "wwwroot")
             });
             builder.WebHost.UseUrls(listenUrl);
-            builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = MaximumUploadSize);
+            builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = MaximumRequestSize);
+            builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+                options.MultipartBodyLengthLimit = (long)MaximumUploadFileSizeMb * 1024 * 1024);
             builder.Services.ConfigureHttpJsonOptions(options =>
                 options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 
@@ -38,6 +42,21 @@ namespace MusicDimension.misc
             app.MapGet("/api/library", () => Results.Ok(store.Snapshot()));
             app.MapGet("/api/status", () => Results.Ok(new { spotifyEnabled = spotify.Configuration.Enable, readerConnected = isReaderConnected() }));
             app.MapGet("/api/settings/spotify", () => Results.Ok(GetSpotifySettings(spotify)));
+            app.MapGet("/api/settings/media", () => Results.Ok(new MediaSettingsResponse(spotify.Configuration.MediaMaxFileSizeMb)));
+            app.MapPut("/api/settings/media", async (UpdateMediaSettingsRequest request) =>
+            {
+                if (request.MaxFileSizeMb is < 1 or > MaximumUploadFileSizeMb)
+                    return Results.BadRequest(new { message = $"Choose a file size between 1 and {MaximumUploadFileSizeMb} MB." });
+                try
+                {
+                    await spotify.UpdateMediaMaxFileSizeMbAsync(request.MaxFileSizeMb, configFileName);
+                    return Results.Ok(new MediaSettingsResponse(spotify.Configuration.MediaMaxFileSizeMb));
+                }
+                catch (Exception exception)
+                {
+                    return Results.Problem($"Could not save media settings: {exception.Message}");
+                }
+            });
             app.MapGet("/api/spotify/receiver", (HttpContext context) =>
             {
                 context.Response.Headers.CacheControl = "no-store";
@@ -108,6 +127,7 @@ namespace MusicDimension.misc
                     ClientSecret = request.ClientSecret ?? current.ClientSecret,
                     SpotifyDeviceName = deviceName,
                     Receiver = receiver,
+                    MediaMaxFileSizeMb = current.MediaMaxFileSizeMb,
                     TokenFileName = current.TokenFileName
                 };
                 try
@@ -131,7 +151,7 @@ namespace MusicDimension.misc
             app.MapPut("/api/control-tags", (TrackControlTagsRequest request) => UpdateTrackControlTags(request, store));
 
             app.MapGet("/api/media", () => Results.Ok(ListMediaFiles()));
-            app.MapPost("/api/media", UploadMediaAsync).DisableAntiforgery();
+            app.MapPost("/api/media", (HttpRequest request) => UploadMediaAsync(request, () => spotify.Configuration.MediaMaxFileSizeMb)).DisableAntiforgery();
             app.MapPost("/api/tags", (CreateTagRequest request) => CreateTag(request, store, spotify.Configuration.Enable));
             app.MapPut("/api/tags/{uid}", (string uid, CreateTagRequest request) => UpdateTag(uid, request, store, spotify.Configuration.Enable));
             app.MapDelete("/api/tags/{uid}", (string uid) => DeleteTag(uid, store));
@@ -266,6 +286,12 @@ namespace MusicDimension.misc
 
         /// <summary>Spotify settings without credentials or token file paths.</summary>
         public sealed record SpotifySettingsResponse(bool Enable, string ClientId, string SpotifyDeviceName, bool HasClientSecret, ReceiverConfig Receiver);
+
+        /// <summary>Maximum accepted media file size in MiB.</summary>
+        public sealed record MediaSettingsResponse(int MaxFileSizeMb);
+
+        /// <summary>Requested maximum media file size in MiB.</summary>
+        public sealed record UpdateMediaSettingsRequest(int MaxFileSizeMb);
 
         private static IResult UpdateTrackControlTags(TrackControlTagsRequest request, MusicConfigStore store)
         {
@@ -451,13 +477,16 @@ namespace MusicDimension.misc
             return new Tag { Uid = uid, Name = request.Name.Trim(), Songs = songs };
         }
 
-        private static async Task<IResult> UploadMediaAsync(HttpRequest request)
+        private static async Task<IResult> UploadMediaAsync(HttpRequest request, Func<int> getMaximumFileSizeMb)
         {
             var form = await request.ReadFormAsync();
             var file = form.Files.GetFile("file");
             if (file == null) return Results.BadRequest(new { message = "Choose a file to upload." });
             if (file.Length == 0) return Results.BadRequest(new { message = "The selected file is empty." });
-            if (file.Length > MaximumUploadSize) return Results.BadRequest(new { message = "The upload exceeds the 512 MB limit." });
+            var maximumFileSize = getMaximumFileSizeMb();
+            var maximumBytes = (long)maximumFileSize * 1024 * 1024;
+            if (file.Length > maximumBytes)
+                return Results.Json(new { message = $"The selected file is {FormatMegabytes(file.Length)} MiB; the current limit is {maximumFileSize} MiB." }, statusCode: StatusCodes.Status413PayloadTooLarge);
 
             var uid = NormalizeUid(form["uid"].FirstOrDefault());
             if (uid == null) return Results.BadRequest(new { message = "Enter or scan a valid tag UID before uploading files." });
@@ -483,6 +512,8 @@ namespace MusicDimension.misc
 
             return Results.Created("/api/media", new MediaFileInfo(fileName, $"media#{uid}#{fileName}", extension, file.Length));
         }
+
+        private static string FormatMegabytes(long bytes) => (bytes / (1024d * 1024d)).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
         private static List<MediaFileInfo> ListMediaFiles()
         {
