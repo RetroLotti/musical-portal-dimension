@@ -501,6 +501,65 @@ async function createTag(event) {
   }
 }
 
+let spotifyDevices = [];
+
+async function loadSpotifyDevices() {
+  const button = document.querySelector("#loadSpotifyDevicesButton");
+  const picker = document.querySelector("#spotifyAvailableDevices");
+  const label = document.querySelector("#spotifyDevicesLabel");
+  const message = document.querySelector("#spotifyDevicesMessage");
+  button.disabled = true;
+  picker.disabled = true;
+  picker.hidden = true;
+  label.hidden = true;
+  picker.replaceChildren();
+  spotifyDevices = [];
+  message.classList.remove("error");
+  message.textContent = "Finding Spotify devices...";
+  try {
+    spotifyDevices = await request("/api/spotify/devices");
+    if (!spotifyDevices.length) {
+      message.textContent = "No devices visible to Spotify. Check that the Pi's Spotify Connect receiver is running and signed in.";
+      return;
+    }
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Choose a device";
+    picker.append(placeholder);
+    for (const [index, device] of spotifyDevices.entries()) {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `${device.name} - ${device.type}${device.isActive ? " (Active)" : ""}${device.isRestricted ? " (Restricted)" : ""}`;
+      option.disabled = device.isRestricted;
+      picker.append(option);
+    }
+    const configuredName = document.querySelector("#spotifyDeviceName").value;
+    const configuredIndex = spotifyDevices.findIndex(device => device.name === configuredName);
+    picker.value = configuredIndex >= 0 ? String(configuredIndex) : "";
+    picker.hidden = false;
+    label.hidden = false;
+    picker.disabled = false;
+    message.textContent = `${spotifyDevices.length} device${spotifyDevices.length === 1 ? "" : "s"} available`;
+  } catch (error) {
+    message.classList.add("error");
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+document.querySelector("#loadSpotifyDevicesButton").addEventListener("click", loadSpotifyDevices);
+document.querySelector("#spotifyAvailableDevices").addEventListener("change", event => {
+  if (event.target.value === "") return;
+  const device = spotifyDevices[Number(event.target.value)];
+  if (!device || device.isRestricted) return;
+  document.querySelector("#spotifyDeviceName").value = device.name;
+  document.querySelector("#spotifyDevicesMessage").textContent = "Device selected (not saved)";
+});
+document.querySelector("#spotifyDeviceName").addEventListener("input", () => {
+  document.querySelector("#spotifyAvailableDevices").value = "";
+});
+
 async function loadSpotifySettings() {
   const settings = await request("/api/settings/spotify");
   document.querySelector("#spotifyEnable").checked = settings.enable;
@@ -509,7 +568,95 @@ async function loadSpotifySettings() {
   document.querySelector("#spotifyClientSecret").value = "";
   document.querySelector("#spotifyClientSecret").placeholder = settings.hasClientSecret ? "Saved (unchanged)" : "Not set";
   document.querySelector("#spotifyClearSecret").checked = false;
+  await loadSpotifyAuthorization();
 }
+
+function renderSpotifyAuthorization(status) {
+  document.querySelector("#spotifyAuthorizationStatus").textContent = status.pending
+    ? "Authorization pending" : status.authorized ? "Connected" : "Not connected";
+  document.querySelector("#refreshSpotifyTokenButton").disabled = !status.authorized;
+  if (!status.pending) {
+    document.querySelector("#spotifyCallbackForm").hidden = true;
+    document.querySelector("#spotifyCallbackUrl").value = "";
+    document.querySelector("#spotifyAuthorizationLink").removeAttribute("href");
+  }
+}
+
+async function loadSpotifyAuthorization() {
+  const status = await request("/api/spotify/auth");
+  renderSpotifyAuthorization(status);
+  return status;
+}
+
+async function connectSpotify() {
+  const button = document.querySelector("#connectSpotifyButton");
+  const message = document.querySelector("#spotifyAuthorizationMessage");
+  button.disabled = true;
+  message.textContent = "";
+  message.classList.remove("error");
+  try {
+    const authorization = await request("/api/spotify/auth/start", { method: "POST" });
+    document.querySelector("#spotifyAuthorizationLink").href = authorization.authorizationUrl;
+    document.querySelector("#spotifyRedirectUri").value = authorization.redirectUri;
+    document.querySelector("#spotifyCallbackUrl").value = "";
+    document.querySelector("#spotifyCallbackForm").hidden = false;
+    await loadSpotifyAuthorization();
+  } catch (error) {
+    message.classList.add("error");
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function completeSpotifyConnection(event) {
+  event.preventDefault();
+  const button = document.querySelector("#completeSpotifyButton");
+  const message = document.querySelector("#spotifyAuthorizationMessage");
+  const input = document.querySelector("#spotifyCallbackUrl");
+  const callbackUrl = input.value.trim();
+  input.value = "";
+  button.disabled = true;
+  message.textContent = "";
+  message.classList.remove("error");
+  try {
+    const status = await request("/api/spotify/auth/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ callbackUrl })
+    });
+    renderSpotifyAuthorization(status);
+    message.textContent = "Spotify connected";
+    showToast("Spotify connected");
+  } catch (error) {
+    message.classList.add("error");
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function refreshSpotifyAccess() {
+  const button = document.querySelector("#refreshSpotifyTokenButton");
+  const message = document.querySelector("#spotifyAuthorizationMessage");
+  button.disabled = true;
+  message.textContent = "";
+  message.classList.remove("error");
+  try {
+    const status = await request("/api/spotify/auth/refresh", { method: "POST" });
+    renderSpotifyAuthorization(status);
+    message.textContent = "Spotify access renewed";
+  } catch (error) {
+    message.classList.add("error");
+    message.textContent = error.message;
+  } finally {
+    await loadSpotifyAuthorization().catch(() => { button.disabled = false; });
+  }
+}
+
+document.querySelector("#connectSpotifyButton").addEventListener("click", connectSpotify);
+document.querySelector("#spotifyCallbackForm").addEventListener("submit", completeSpotifyConnection);
+document.querySelector("#refreshSpotifyTokenButton").addEventListener("click", refreshSpotifyAccess);
 
 async function saveSpotifySettings(event) {
   event.preventDefault();

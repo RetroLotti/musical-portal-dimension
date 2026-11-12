@@ -38,6 +38,47 @@ namespace MusicDimension.misc
             app.MapGet("/api/library", () => Results.Ok(store.Snapshot()));
             app.MapGet("/api/status", () => Results.Ok(new { spotifyEnabled = spotify.Configuration.Enable, readerConnected = isReaderConnected() }));
             app.MapGet("/api/settings/spotify", () => Results.Ok(GetSpotifySettings(spotify)));
+            app.MapGet("/api/spotify/devices", async (HttpContext context, CancellationToken cancellationToken) =>
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                return await GetSpotifyDevicesAsync(spotify, cancellationToken);
+            });
+            app.MapGet("/api/spotify/auth", async (HttpContext context, CancellationToken cancellationToken) =>
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                return Results.Ok(await spotify.GetAuthorizationStatusAsync(cancellationToken));
+            });
+            app.MapPost("/api/spotify/auth/start", (HttpContext context, CancellationToken cancellationToken) =>
+                SpotifyAuthorizationActionAsync(context, async () =>
+                {
+                    var sessionId = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+                    var authorization = await spotify.BeginAuthorizationAsync(sessionId, cancellationToken);
+                    context.Response.Cookies.Append("spotify-auth-session", sessionId, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = context.Request.IsHttps,
+                        SameSite = SameSiteMode.Strict,
+                        Path = "/api/spotify/auth",
+                        MaxAge = TimeSpan.FromMinutes(10)
+                    });
+                    return authorization;
+                }));
+            app.MapPost("/api/spotify/auth/complete", (CompleteSpotifyAuthorizationRequest request, HttpContext context, CancellationToken cancellationToken) =>
+                SpotifyAuthorizationActionAsync(context, async () =>
+                {
+                    var sessionId = context.Request.Cookies["spotify-auth-session"];
+                    if (string.IsNullOrEmpty(sessionId))
+                        throw new InvalidOperationException("Start Connect Spotify in this browser before completing authorization.");
+                    await spotify.CompleteAuthorizationAsync(sessionId, request.CallbackUrl, cancellationToken);
+                    context.Response.Cookies.Delete("spotify-auth-session", new CookieOptions { Path = "/api/spotify/auth" });
+                    return await spotify.GetAuthorizationStatusAsync(cancellationToken);
+                }));
+            app.MapPost("/api/spotify/auth/refresh", (HttpContext context, CancellationToken cancellationToken) =>
+                SpotifyAuthorizationActionAsync(context, async () =>
+                {
+                    await spotify.RefreshAuthorizationAsync(cancellationToken);
+                    return await spotify.GetAuthorizationStatusAsync(cancellationToken);
+                }));
             app.MapGet("/api/spotify/search", (string? q, string? type, CancellationToken cancellationToken) =>
                 SearchSpotifyAsync(q, type, spotify, cancellationToken));
             app.MapPut("/api/settings/spotify", async (UpdateSpotifySettingsRequest request) =>
@@ -89,6 +130,66 @@ namespace MusicDimension.misc
             return new(configuration.Enable, configuration.ClientId, configuration.SpotifyDeviceName,
                 !string.IsNullOrEmpty(configuration.ClientSecret));
         }
+
+        private static async Task<IResult> GetSpotifyDevicesAsync(SpotifyHandler spotify, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Results.Ok(await spotify.GetDevicesAsync(cancellationToken));
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { message = exception.Message });
+            }
+            catch (SpotifyAPI.Web.APIException exception)
+            {
+                var status = (int?)exception.Response?.StatusCode;
+                var message = status switch
+                {
+                    401 => "Spotify authorization is invalid. Connect Spotify again in Spotify settings.",
+                    403 => "Spotify device access is not available for this app or account. Check Spotify app permissions.",
+                    429 => "Spotify is rate limiting device requests. Wait before trying again.",
+                    _ => "Spotify devices are temporarily unavailable. Try again later."
+                };
+                return Results.Json(new { message }, statusCode: status == 429 ? 429 : StatusCodes.Status502BadGateway);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                return Results.Json(new { message = "Could not load Spotify devices. Check the network and Spotify authorization, then try again." },
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+        }
+
+        private static async Task<IResult> SpotifyAuthorizationActionAsync(HttpContext context, Func<Task<object>> action)
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            var origin = context.Request.Headers.Origin.ToString();
+            if (context.Request.Headers["Sec-Fetch-Site"] == "cross-site"
+                || (!string.IsNullOrEmpty(origin) && (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri)
+                    || Uri.Compare(originUri, new Uri($"{context.Request.Scheme}://{context.Request.Host}"),
+                        UriComponents.SchemeAndServer, UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)))
+                return Results.Json(new { message = "Start Spotify authorization from this web manager." }, statusCode: StatusCodes.Status403Forbidden);
+            try
+            {
+                return Results.Ok(await action());
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { message = exception.Message });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { message = exception.Message });
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                return Results.Json(new { message = "Could not save or renew Spotify authorization. Check the network and config directory permissions, then try again. A new Connect Spotify login may be needed." },
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+        }
+
+        /// <summary>The full callback URL returned after approving Spotify authorization.</summary>
+        public sealed record CompleteSpotifyAuthorizationRequest(string? CallbackUrl);
 
         private static async Task<IResult> SearchSpotifyAsync(string? query, string? type, SpotifyHandler spotify, CancellationToken cancellationToken)
         {

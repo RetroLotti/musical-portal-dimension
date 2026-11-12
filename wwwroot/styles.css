@@ -89,6 +89,19 @@ h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23px;
 .spotify-toggle input { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--forest-light); }
 .spotify-settings .control-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .spotify-settings .form-message { overflow-wrap: anywhere; }
+.spotify-device-name-row { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 8px; }
+#spotifyAvailableDevices[hidden], #spotifyDevicesLabel[hidden] { display: none; }
+#loadSpotifyDevicesButton:disabled { opacity: .6; cursor: wait; }
+.spotify-authorization { display: grid; gap: 16px; border-top: 1px solid var(--line); padding-top: 20px; }
+.spotify-auth-header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.spotify-auth-header h3 { margin: 0 0 8px; font-size: 15px; }
+.spotify-auth-header p, #spotifyAuthorizationMessage { margin: 0; }
+.spotify-auth-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#spotifyCallbackForm[hidden] { display: none; }
+#spotifyAuthorizationLink { justify-self: start; min-height: 42px; padding: 10px 15px; font-size: 12px; text-decoration: none; }
+#spotifyCallbackForm .button { justify-self: start; }
+#spotifyCallbackUrl { width: 100%; min-width: 0; height: 42px; padding: 0 11px; border: 1px solid #cfd9d0; border-radius: 5px; background: #fff; color: var(--ink); font-size: 13px; }
+#spotifyCallbackUrl:focus-visible { outline: 2px solid var(--forest-light); outline-offset: 2px; }
 .control-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .control-uid-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
 .control-uid-row .button { min-height: 38px; }
@@ -221,6 +234,7 @@ input::placeholder { color: #9ba8a1; }
   .control-section { padding: 19px 18px; }
   .spotify-settings { padding: 19px 18px; }
   .spotify-settings .control-footer { align-items: stretch; flex-direction: column; }
+  .spotify-auth-header { flex-direction: column; }
   .form-footer { align-items: flex-start; flex-direction: column; }
   .form-actions { width: 100%; }
   .button-primary { width: 100%; }

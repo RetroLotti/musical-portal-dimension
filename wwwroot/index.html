@@ -79,7 +79,13 @@
         <div class="control-fields">
           <div class="field-group">
             <label for="spotifyDeviceName">Device name</label>
-            <input id="spotifyDeviceName" type="text" autocomplete="off">
+            <div class="spotify-device-name-row">
+              <input id="spotifyDeviceName" type="text" autocomplete="off">
+              <button id="loadSpotifyDevicesButton" class="icon-button" type="button" title="Find Spotify devices" aria-label="Find Spotify devices">↻</button>
+            </div>
+            <label id="spotifyDevicesLabel" for="spotifyAvailableDevices" hidden>Available Spotify devices</label>
+            <select id="spotifyAvailableDevices" hidden disabled></select>
+            <span id="spotifyDevicesMessage" class="form-message" role="status" aria-live="polite"></span>
           </div>
           <div class="field-group">
             <label for="spotifyClientId">Client ID</label>
@@ -99,6 +105,31 @@
           <button id="saveSpotifyButton" class="button button-primary" type="submit">Save Spotify settings</button>
         </div>
       </form>
+      <div class="spotify-authorization" aria-labelledby="spotifyAuthorizationHeading">
+        <div class="spotify-auth-header">
+          <div>
+            <h3 id="spotifyAuthorizationHeading">Account authorization</h3>
+            <p id="spotifyAuthorizationStatus" class="form-message" role="status" aria-live="polite">Checking authorization</p>
+          </div>
+          <div class="spotify-auth-actions">
+            <button id="connectSpotifyButton" class="button button-secondary" type="button">Connect Spotify</button>
+            <button id="refreshSpotifyTokenButton" class="button button-secondary" type="button" disabled>Refresh access</button>
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="spotifyRedirectUri">Spotify app redirect URI</label>
+          <input id="spotifyRedirectUri" type="text" value="http://127.0.0.1:8888/callback" readonly>
+        </div>
+        <form id="spotifyCallbackForm" hidden>
+          <a id="spotifyAuthorizationLink" class="button button-primary" target="_blank" rel="noopener noreferrer">Authorize with Spotify</a>
+          <div class="field-group">
+            <label for="spotifyCallbackUrl">Returned callback URL</label>
+            <input id="spotifyCallbackUrl" type="url" placeholder="http://127.0.0.1:8888/callback?code=...&amp;state=..." autocomplete="off" spellcheck="false" maxlength="16384" required>
+          </div>
+          <button id="completeSpotifyButton" class="button button-primary" type="submit">Complete connection</button>
+        </form>
+        <p id="spotifyAuthorizationMessage" class="form-message" role="status" aria-live="polite"></p>
+      </div>
     </section>
 
     <section id="libraryPanel" class="workspace tab-panel" role="tabpanel" aria-labelledby="libraryTab" tabindex="0">

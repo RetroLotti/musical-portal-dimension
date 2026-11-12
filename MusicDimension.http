@@ -1,0 +1,21 @@
+@baseUrl = http://127.0.0.1:5080
+
+### Read exact Spotify device names without changing playback
+GET {{baseUrl}}/api/spotify/devices
+
+### Authorization status (never returns tokens)
+GET {{baseUrl}}/api/spotify/auth
+
+### Start a ten-minute PKCE login; retain the returned session cookie
+POST {{baseUrl}}/api/spotify/auth/start
+
+### Complete in the same browser/session using the callback URL from Spotify
+POST {{baseUrl}}/api/spotify/auth/complete
+Content-Type: application/json
+
+{
+  "callbackUrl": "http://127.0.0.1:8888/callback?code=REPLACE_WITH_CODE&state=REPLACE_WITH_STATE"
+}
+
+### Renew access using the saved refresh token
+POST {{baseUrl}}/api/spotify/auth/refresh

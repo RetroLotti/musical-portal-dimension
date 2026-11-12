@@ -20,20 +20,18 @@
     "volumneup",
     "volumnedown"
   ],
-  "unusedTags": {
-
-  },
+  "unusedTags": {},
   "registeredTags": [
     {
       "uid": "04-27-C1-9A-F0-4A-81",
-      "name": "Beetlejuice",
+      "name": "JUNGE",
       "songs": [
         {
-          "name": "Spotify Track Example",
+          "name": "JUNGE",
           "type": "spotify",
           "path": null,
           "spotifyType": "track",
-          "spotifyId": "63y2aL2dT6zzw8FOSLaNrp"
+          "spotifyId": "10waMsh44ojvTwXAIy213n"
         }
       ]
     },

@@ -7,7 +7,7 @@
     using System.Net;
     using System.Text;
 
-    public class SpotifyHandler(Config config, SpotifyClientConfig? clientConfiguration = null)
+    public class SpotifyHandler(Config config, SpotifyClientConfig? clientConfiguration = null, HttpClient? tokenHttpClient = null)
     {
         private Config _config = config;
         private readonly SemaphoreSlim _operationLock = new(1, 1);
@@ -15,16 +15,27 @@
 
         private const string SpotifyTokenUrl = "https://accounts.spotify.com/api/token";
         private const string RedirectUri = "http://127.0.0.1:8888/callback";
+        private static readonly HttpClient DefaultTokenHttpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
 
         private string _accessToken = string.Empty;
         private string _refreshToken = string.Empty;
         private int _expiresIn;
         private DateTime _createdAt;
+        private PendingAuthorization? _pendingAuthorization;
+        private string? _authorizationError;
+
+        private sealed record PendingAuthorization(string SessionId, string State, string Verifier, string ClientId, DateTimeOffset ExpiresAt);
+
+        /// <summary>A one-time PKCE authorization link without tokens or the code verifier.</summary>
+        public sealed record SpotifyAuthorizationStart(string AuthorizationUrl, string RedirectUri, DateTimeOffset ExpiresAt);
+
+        /// <summary>Saved authorization and pending login status without credentials.</summary>
+        public sealed record SpotifyAuthorizationStatus(bool Authorized, bool Pending, DateTimeOffset? AccessTokenExpiresAt, string? Message);
 
         public static async Task<SpotifyHandler> CreateAsync(Config config)
         {
             var instance = new SpotifyHandler(config);
-            await instance.CheckToken(allowInteractive: true);
+            await instance.AuthorizeInteractivelyAsync();
             return instance;
         }
 
@@ -33,7 +44,7 @@
             if (!_config.Enable) return;
             if (!File.Exists(_config.TokenFileName))
             {
-                Console.WriteLine("Spotify needs an initial interactive OAuth login. Local playback and web settings remain available.");
+                Console.WriteLine("Spotify needs authorization. Use Connect Spotify in web settings, or run with --spotify-login. Local playback remains available.");
                 return;
             }
             await ExecuteAsync(async spotify => { await spotify.Player.GetAvailableDevices(); });
@@ -54,7 +65,117 @@
                     }
                 }
                 await SaveJsonAsync(fileName, configuration);
+                if (_config.ClientId != configuration.ClientId)
+                {
+                    _pendingAuthorization = null;
+                    _authorizationError = null;
+                }
                 _config = configuration;
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
+        public async Task<SpotifyAuthorizationStart> BeginAuthorizationAsync(string sessionId, CancellationToken cancellationToken = default)
+        {
+            await _operationLock.WaitAsync(cancellationToken);
+            try
+            {
+                if (string.IsNullOrWhiteSpace(_config.ClientId))
+                    throw new InvalidOperationException("Save a Spotify client ID before connecting.");
+                var verifier = GenerateCodeVerifier();
+                var state = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+                var pending = new PendingAuthorization(sessionId, state, verifier, _config.ClientId, DateTimeOffset.UtcNow.AddMinutes(10));
+                var login = new LoginRequest(new Uri(RedirectUri), pending.ClientId, LoginRequest.ResponseType.Code)
+                {
+                    State = state,
+                    CodeChallengeMethod = "S256",
+                    CodeChallenge = GenerateCodeChallenge(verifier),
+                    Scope = [Scopes.UserReadPrivate, Scopes.UserReadPlaybackState, Scopes.UserModifyPlaybackState]
+                };
+                _pendingAuthorization = pending;
+                return new(login.ToUri().ToString(), RedirectUri, pending.ExpiresAt);
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
+        public async Task CompleteAuthorizationAsync(string sessionId, string? callbackUrl, CancellationToken cancellationToken = default)
+        {
+            await _operationLock.WaitAsync(cancellationToken);
+            try
+            {
+                var pending = _pendingAuthorization;
+                if (pending == null || pending.ExpiresAt <= DateTimeOffset.UtcNow || pending.SessionId != sessionId || pending.ClientId != _config.ClientId)
+                    throw new InvalidOperationException("Spotify login expired or belongs to another browser. Start Connect Spotify again.");
+                if (string.IsNullOrWhiteSpace(callbackUrl) || callbackUrl.Length > 16384
+                    || !Uri.TryCreate(callbackUrl, UriKind.Absolute, out var callback)
+                    || callback.GetLeftPart(UriPartial.Path) != RedirectUri || !string.IsNullOrEmpty(callback.Fragment) || !string.IsNullOrEmpty(callback.UserInfo))
+                    throw new ArgumentException("Paste the full returned http://127.0.0.1:8888/callback URL from the browser address bar.");
+                var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(callback.Query);
+                if (!query.TryGetValue("state", out var state) || state.Count != 1 || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                    Encoding.UTF8.GetBytes(state.ToString()), Encoding.UTF8.GetBytes(pending.State)))
+                    throw new ArgumentException("The Spotify callback does not match this login. Use the URL returned by the current authorization link.");
+                if (query.ContainsKey("error"))
+                {
+                    _pendingAuthorization = null;
+                    throw new InvalidOperationException("Spotify authorization was declined. Start Connect Spotify again when ready.");
+                }
+                if (!query.TryGetValue("code", out var code) || code.Count != 1 || string.IsNullOrWhiteSpace(code.ToString()))
+                    throw new ArgumentException("The callback URL does not contain a Spotify authorization code.");
+                _pendingAuthorization = null;
+                var tokens = await RequestTokenAsync(new Dictionary<string, string>
+                {
+                    ["grant_type"] = "authorization_code",
+                    ["code"] = code.ToString(),
+                    ["redirect_uri"] = RedirectUri,
+                    ["client_id"] = pending.ClientId,
+                    ["code_verifier"] = pending.Verifier
+                }, cancellationToken);
+                if (string.IsNullOrWhiteSpace(tokens.RefreshToken))
+                    throw new InvalidOperationException("Spotify did not return a refresh token. Start Connect Spotify again and approve access.");
+                _accessToken = tokens.AccessToken;
+                _refreshToken = tokens.RefreshToken;
+                _expiresIn = tokens.ExpiresIn;
+                _createdAt = DateTime.UtcNow;
+                await SaveTokenAsync();
+                _authorizationError = null;
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
+        public async Task<SpotifyAuthorizationStatus> GetAuthorizationStatusAsync(CancellationToken cancellationToken = default)
+        {
+            await _operationLock.WaitAsync(cancellationToken);
+            try
+            {
+                var tokens = JsonFileHandler.ReadObjectFromJsonFile<LastKnownTokens>(_config.TokenFileName);
+                var authorized = tokens != null && !string.IsNullOrWhiteSpace(tokens.RefreshToken)
+                    && (string.IsNullOrEmpty(tokens.ClientId) || tokens.ClientId == _config.ClientId) && _authorizationError == null;
+                DateTimeOffset? expiresAt = authorized && tokens != null
+                    ? new DateTimeOffset(DateTime.SpecifyKind(tokens.CreatedAt, DateTimeKind.Utc)).AddSeconds(tokens.ExpiresIn) : null;
+                return new(authorized, _pendingAuthorization?.ExpiresAt > DateTimeOffset.UtcNow, expiresAt,
+                    _authorizationError ?? (authorized ? null : "Spotify authorization is required. Connect Spotify to continue."));
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
+        public async Task RefreshAuthorizationAsync(CancellationToken cancellationToken = default)
+        {
+            await _operationLock.WaitAsync(cancellationToken);
+            try
+            {
+                await CheckToken(forceRefresh: true, cancellationToken: cancellationToken);
             }
             finally
             {
@@ -67,7 +188,14 @@
             var temporaryFile = fileName + ".tmp";
             try
             {
-                await File.WriteAllTextAsync(temporaryFile, JsonConvert.SerializeObject(value, Formatting.Indented));
+                var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write, Share = FileShare.None };
+                if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+                await using (var stream = new FileStream(temporaryFile, options))
+                {
+                    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temporaryFile, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                    await using var writer = new StreamWriter(stream);
+                    await writer.WriteAsync(JsonConvert.SerializeObject(value, Formatting.Indented));
+                }
                 File.Move(temporaryFile, fileName, overwrite: true);
             }
             finally
@@ -76,20 +204,45 @@
             }
         }
 
-        private async Task ExecuteAsync(Func<SpotifyClient, Task> action, CancellationToken cancellationToken = default)
+        private async Task ExecuteAsync(Func<SpotifyClient, Task> action, CancellationToken cancellationToken = default, bool requireEnabled = true)
         {
             await _operationLock.WaitAsync(cancellationToken);
             try
             {
-                if (!_config.Enable) throw new InvalidOperationException("Spotify is disabled.");
-                await CheckToken();
-                await action(new SpotifyClient((clientConfiguration ?? SpotifyClientConfig.CreateDefault()).WithToken(_accessToken)));
+                if (requireEnabled && !_config.Enable) throw new InvalidOperationException("Spotify is disabled.");
+                await CheckToken(cancellationToken: cancellationToken);
+                try
+                {
+                    await action(new SpotifyClient((clientConfiguration ?? SpotifyClientConfig.CreateDefault()).WithToken(_accessToken)));
+                }
+                catch (APIException exception) when (exception.Response?.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    await CheckToken(forceRefresh: true, cancellationToken: cancellationToken);
+                    await action(new SpotifyClient((clientConfiguration ?? SpotifyClientConfig.CreateDefault()).WithToken(_accessToken)));
+                }
             }
             finally
             {
                 _operationLock.Release();
             }
         }
+
+        public async Task<IReadOnlyList<SpotifyDeviceResponse>> GetDevicesAsync(CancellationToken cancellationToken = default)
+        {
+            var results = new List<SpotifyDeviceResponse>();
+            await ExecuteAsync(async spotify =>
+            {
+                var response = await spotify.Player.GetAvailableDevices(cancellationToken);
+                foreach (var device in response.Devices)
+                {
+                    results.Add(new(device.Name, device.Type, device.IsActive, device.IsRestricted));
+                }
+            }, cancellationToken, requireEnabled: false);
+            return results;
+        }
+
+        /// <summary>A Spotify Connect device with its exact name and playback-control availability.</summary>
+        public sealed record SpotifyDeviceResponse(string Name, string Type, bool IsActive, bool IsRestricted);
 
         public async Task<IReadOnlyList<SpotifySearchResult>> SearchAsync(string query, string type, CancellationToken cancellationToken = default)
         {
@@ -235,30 +388,22 @@
             });
         }
 
-        private static async Task<SpotifyTokenResponse?> RefreshTokenAsync(string clientId, string refreshToken)
+        private async Task<SpotifyTokenResponse> RequestTokenAsync(Dictionary<string, string> parameters, CancellationToken cancellationToken = default)
         {
-            using var httpClient = new HttpClient();
-
-            // Prepare the request content
-            using var content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["grant_type"] = "refresh_token",
-                ["refresh_token"] = refreshToken,
-                ["client_id"] = clientId
-            });
-
-            // Send the POST request
-            var response = await httpClient.PostAsync(SpotifyTokenUrl, content);
+            using var content = new FormUrlEncodedContent(parameters);
+            using var response = await (tokenHttpClient ?? DefaultTokenHttpClient).PostAsync(SpotifyTokenUrl, content, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Failed to refresh token. Status Code: {response.StatusCode}, Response: {await response.Content.ReadAsStringAsync()}");
+                if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized)
+                    throw new InvalidOperationException("Spotify authorization is invalid or has been revoked. Connect Spotify again in Spotify settings and check the client ID.");
+                throw new HttpRequestException("Spotify's token service is unavailable. Try again later; saved credentials have not been removed.", null, response.StatusCode);
             }
 
-            // Parse the response JSON
-            var json = await response.Content.ReadAsStringAsync();
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
             var tokenResponse = JsonConvert.DeserializeObject<SpotifyTokenResponse>(json);
-
+            if (tokenResponse == null || string.IsNullOrWhiteSpace(tokenResponse.AccessToken) || tokenResponse.ExpiresIn <= 0)
+                throw new HttpRequestException("Spotify returned an incomplete token response. Try again later.");
             return tokenResponse;
         }
 
@@ -266,7 +411,7 @@
         {
             var tokens = new LastKnownTokens
             {
-            ClientId = _config.ClientId,
+                ClientId = _config.ClientId,
                 ExpiresIn = _expiresIn,
                 AccessToken = _accessToken,
                 RefreshToken = _refreshToken,
@@ -276,7 +421,7 @@
             await SaveJsonAsync(_config.TokenFileName, tokens);
         }
 
-        private async Task CheckToken(bool allowInteractive = false)
+        private async Task CheckToken(bool forceRefresh = false, CancellationToken cancellationToken = default)
         {
             // check for token file
             var tokens = JsonFileHandler.ReadObjectFromJsonFile<LastKnownTokens>(_config.TokenFileName);
@@ -286,87 +431,48 @@
             {
                 if (!string.IsNullOrEmpty(tokens.ClientId) && tokens.ClientId != _config.ClientId)
                 {
-                    throw new InvalidOperationException("Spotify client ID changed. Back up/remove config/tokens.json and complete OAuth again for this client ID.");
+                    throw new InvalidOperationException("Spotify client ID changed. Connect Spotify again in Spotify settings.");
                 }
                 _accessToken = tokens.AccessToken;
                 _refreshToken = tokens.RefreshToken;
                 _expiresIn = tokens.ExpiresIn;
                 _createdAt = tokens.CreatedAt;
 
-                if (tokens.IsExpired)
+                if (string.IsNullOrWhiteSpace(_refreshToken))
+                    throw new InvalidOperationException("Spotify has no saved refresh token. Connect Spotify in Spotify settings.");
+
+                if (forceRefresh || string.IsNullOrWhiteSpace(_accessToken) || tokens.ExpiresIn <= 60
+                    || tokens.CreatedAt <= DateTime.UtcNow.AddSeconds(60d - tokens.ExpiresIn))
                 {
-                    var newToken = await RefreshTokenAsync(_config.ClientId, _refreshToken);
-                    if (newToken != null)
+                    SpotifyTokenResponse newToken;
+                    try
                     {
-                        _accessToken = newToken.AccessToken;
-                        _expiresIn = newToken.ExpiresIn;
-                        _createdAt = newToken.CreatedAt;
-
-                        if (!string.IsNullOrWhiteSpace(newToken.RefreshToken))
+                        newToken = await RequestTokenAsync(new Dictionary<string, string>
                         {
-                            _refreshToken = newToken.RefreshToken;
-                        }
-
-                        await SaveTokenAsync();
+                            ["grant_type"] = "refresh_token",
+                            ["refresh_token"] = _refreshToken,
+                            ["client_id"] = _config.ClientId
+                        }, cancellationToken);
                     }
-                    else
+                    catch (InvalidOperationException exception)
                     {
-                        throw new NullReferenceException(nameof(newToken));
+                        _authorizationError = exception.Message;
+                        throw;
                     }
+                    _accessToken = newToken.AccessToken;
+                    _expiresIn = newToken.ExpiresIn;
+                    _createdAt = DateTime.UtcNow;
+                    if (!string.IsNullOrWhiteSpace(newToken.RefreshToken))
+                    {
+                        _refreshToken = newToken.RefreshToken;
+                    }
+                    await SaveTokenAsync();
+                    _authorizationError = null;
                 }
             }
             else
             {
-                if (!allowInteractive)
-                    throw new InvalidOperationException("Spotify login is required. Run MusicDimension with --spotify-login interactively before using Spotify playback.");
-
-                // 1. PKCE Code Verifier und Challenge generieren
-                var codeVerifier = GenerateCodeVerifier();
-                var codeChallenge = GenerateCodeChallenge(codeVerifier);
-
-                // 2. Authorize URL erstellen
-                var loginRequest = new LoginRequest(new Uri(RedirectUri), _config.ClientId, LoginRequest.ResponseType.Code)
-                {
-                    CodeChallengeMethod = "S256",
-                    CodeChallenge = codeChallenge,
-                    Scope = [Scopes.UserReadPrivate, Scopes.UserReadPlaybackState, Scopes.UserModifyPlaybackState]
-                };
-
-                var authUri = loginRequest.ToUri();
-
-                Console.WriteLine($"open this link to authenticate:\n{authUri}");
-
-                try
-                {
-                    if (!OperatingSystem.IsLinux() || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY"))
-                        || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
-                    {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = authUri.ToString(),
-                            UseShellExecute = true
-                        });
-                    }
-                }
-                catch (System.ComponentModel.Win32Exception)
-                {
-                    Console.WriteLine("Could not open a browser. Open the printed login URL manually.");
-                }
-
-                // 4. Redirect URI abwarten (HTTP-Listener starten)
-                var authorizationCode = await WaitForAuthorizationCode();
-
-                // 5. Access Token mit PKCE anfordern
-                var tokenRequest = new PKCETokenRequest(_config.ClientId, authorizationCode, new Uri(RedirectUri), codeVerifier);
-                var oauthClient = new OAuthClient();
-                var tokenResponse = await oauthClient.RequestToken(tokenRequest);
-
-                _accessToken = tokenResponse.AccessToken;
-                _refreshToken = tokenResponse.RefreshToken;
-                _expiresIn = tokenResponse.ExpiresIn;
-                _createdAt = tokenResponse.CreatedAt;
-
-                await SaveTokenAsync();
+                throw new InvalidOperationException("Spotify login is required. Connect Spotify in Spotify settings, or run with --spotify-login.");
             }
         }
 
@@ -389,27 +495,48 @@
             return Convert.ToBase64String(hash).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         }
 
-        // Funktion, die auf die Weiterleitung wartet und den Code extrahiert
-        private static async Task<string> WaitForAuthorizationCode()
+        private async Task AuthorizeInteractivelyAsync()
         {
-            var listener = new HttpListener();
-            listener.Prefixes.Add(RedirectUri + "/");
+            using var listener = new HttpListener();
+            listener.Prefixes.Add("http://127.0.0.1:8888/");
             listener.Start();
-
-            Console.WriteLine("Warte auf die Weiterleitung...");
-
-            var context = await listener.GetContextAsync();
-            var code = context.Request.QueryString["code"];
-            var response = context.Response;
-
-            const string responseString = "<html><body>Du kannst dieses Fenster schließen.</body></html>";
-            var buffer = Encoding.UTF8.GetBytes(responseString);
-            response.ContentLength64 = buffer.Length;
-            await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
-            response.Close();
-
-            listener.Stop();
-            return code ?? string.Empty;
+            var sessionId = Guid.NewGuid().ToString("N");
+            var authorization = await BeginAuthorizationAsync(sessionId);
+            Console.WriteLine($"Open this link to authenticate:\n{authorization.AuthorizationUrl}");
+            try
+            {
+                if (!OperatingSystem.IsLinux() || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY"))
+                    || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
+                    Process.Start(new ProcessStartInfo { FileName = authorization.AuthorizationUrl, UseShellExecute = true });
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                Console.WriteLine("Open the printed login URL manually.");
+            }
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+            while (true)
+            {
+                var context = await listener.GetContextAsync().WaitAsync(timeout.Token);
+                if (context.Request.Url?.AbsolutePath != "/callback")
+                {
+                    context.Response.StatusCode = 404;
+                    context.Response.Close();
+                    continue;
+                }
+                try
+                {
+                    await CompleteAuthorizationAsync(sessionId, context.Request.Url.AbsoluteUri, timeout.Token);
+                    var buffer = Encoding.UTF8.GetBytes("Spotify connected. You can close this window.");
+                    context.Response.ContentType = "text/plain; charset=utf-8";
+                    context.Response.Headers["Cache-Control"] = "no-store";
+                    await context.Response.OutputStream.WriteAsync(buffer, timeout.Token);
+                    return;
+                }
+                finally
+                {
+                    context.Response.Close();
+                }
+            }
         }
     }
 }

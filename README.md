@@ -81,9 +81,38 @@ The LEGO Dimensions Toy Pad rule uses vendor/product `0e6f:0241` and grants acce
 
 ### Spotify Settings And Login
 
+Next to **Device name**, click the refresh icon (**Find Spotify devices**) to load the exact names visible to your Spotify account. Choose your Pi from **Available Spotify devices**, then click **Save Spotify settings**. Active devices are marked; restricted devices are shown but cannot be selected because Spotify does not allow controlling them. Loading devices never transfers playback or changes the saved name. Manual name entry remains available. This read-only lookup also works with Spotify playback disabled, but requires account authorization. If no Pi appears, its librespot/raspotify receiver must be running and signed in before Spotify can list it.
+
 The web manager's **Spotify settings** section edits `enable`, `spotifyDeviceName`, `clientId`, and `clientSecret` in `config/config.json`. Saved changes apply immediately without restarting, including enabling Spotify after a local-only startup. Disabling prevents further Spotify playback/control requests; it does not shut down librespot. The secret is never returned to the browser: leave the field blank to keep it, or select **Clear saved client secret** to remove it. This application uses PKCE, so the client secret is not needed for login or token refresh. The token file location is internal and is not web-editable. These settings are available to everyone who can reach the unauthenticated web manager; use only a trusted LAN or an SSH tunnel.
 
-Complete the first OAuth login interactively with `./MusicDimension --spotify-login` (or `dotnet run -- --spotify-login` from source). Register `http://127.0.0.1:8888/callback` in the Spotify developer dashboard. The browser callback must reach the machine running this command; for a headless Pi, use an SSH tunnel for port 8888, open the printed URL on your computer, and run the command as a user who can write the Pi's config directory. Keep the generated `config/tokens.json` readable/writable by the `musicdimension` service user. Normal startup never waits for browser login, and Spotify failures do not block local playback. When changing the client ID, back up/remove the old token file and repeat login for the new app. Keep `config/config.json`, `config/music.json`, `config/tokens.json`, and `media/` when updating the published binaries.
+Spotify requires a person's consent once to issue a user refresh token. It cannot be generated unattended from the client ID/secret, and Spotify does not provide a device-code login for this application. After consent, the Pi renews access automatically without a display or browser. It refreshes on startup/use when access has less than a minute remaining, retries an expired/rejected access token once, preserves the existing refresh token when Spotify omits a replacement, and saves any rotated refresh token atomically. No continuously running browser or periodic manual token copying is needed. A revoked/invalid refresh token requires consent again; temporary network errors do not delete saved credentials.
+
+#### First Login From The Website (Headless Pi)
+
+1. Register **exactly** `http://127.0.0.1:8888/callback` as a redirect URI in your Spotify developer app. The client secret is not required for PKCE.
+2. Open the Pi's web manager from your computer or phone. In **Spotify settings**, save your client ID, device name, and desired enabled state.
+3. Click **Connect Spotify**, then **Authorize with Spotify**, and approve access in the new browser tab.
+4. Spotify redirects to `http://127.0.0.1:8888/callback?code=...&state=...`. With this website flow there is no listener on your computer, so a connection-error page is expected. Copy the **complete address from the address bar**, not the error-page text.
+5. Return to the original web manager tab/browser, paste that address into **Returned callback URL**, and click **Complete connection** within ten minutes. The Pi exchanges the one-time code and saves `config/tokens.json` itself; the website never returns access/refresh tokens. Treat the returned URL as sensitive and do not share it or commit it to source control.
+
+The website shows **Connected** once credentials are saved. **Refresh access** tests renewal immediately; normal playback/search renews automatically. Reconnect in the same way after revoking app access, changing the client ID, or losing the token file. No need to delete the old file before reconnecting. A new login replaces the previous pending login; restarting the service cancels pending logins. Settings and Spotify authorization are still available to anyone who can reach the unauthenticated web manager. Prefer an SSH tunnel and do not expose it publicly:
+
+```sh
+# Run on your computer, then open http://127.0.0.1:5080 there:
+ssh -N -L 5080:127.0.0.1:5080 pi@YOUR_PI_ADDRESS
+```
+
+#### Optional CLI Login
+
+`./MusicDimension --spotify-login` (or `dotnet run -- --spotify-login` from source) starts a loopback callback listener before printing/opening the authorization link. For a headless Pi, run the following tunnel on your computer, open the printed link there, and leave the login command running on the Pi:
+
+```sh
+ssh -N -L 8888:127.0.0.1:8888 pi@YOUR_PI_ADDRESS
+```
+
+In this CLI flow the callback completes automatically; no URL pasting is needed. Run the login command from the installation directory as the service user, or ensure the resulting token file belongs to that user. The listener times out after ten minutes and validates OAuth state and PKCE. Normal service startup never opens a browser or waits for consent.
+
+Keep `config/tokens.json` readable/writable by the `musicdimension` service user. On Linux, newly saved credentials are owner-only (`0600`). The token file is ignored by Git; ignore rules do not remove files already tracked or erase past commits. Revoke exposed Spotify authorization if credentials were previously committed. Keep `config/config.json`, `config/music.json`, `config/tokens.json`, and `media/` when updating the published binaries.
 
 ### Search Spotify For A Tag
 
