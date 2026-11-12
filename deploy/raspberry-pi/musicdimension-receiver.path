@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch Music Dimension receiver settings
+
+[Path]
+PathChanged=/opt/musicdimension/config/config.json
+Unit=musicdimension-receiver.service
+
+[Install]
+WantedBy=multi-user.target

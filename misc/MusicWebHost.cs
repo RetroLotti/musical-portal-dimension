@@ -38,6 +38,11 @@ namespace MusicDimension.misc
             app.MapGet("/api/library", () => Results.Ok(store.Snapshot()));
             app.MapGet("/api/status", () => Results.Ok(new { spotifyEnabled = spotify.Configuration.Enable, readerConnected = isReaderConnected() }));
             app.MapGet("/api/settings/spotify", () => Results.Ok(GetSpotifySettings(spotify)));
+            app.MapGet("/api/spotify/receiver", (HttpContext context) =>
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                return Results.Ok(GetReceiverStatus());
+            });
             app.MapGet("/api/spotify/devices", async (HttpContext context, CancellationToken cancellationToken) =>
             {
                 context.Response.Headers.CacheControl = "no-store";
@@ -87,12 +92,22 @@ namespace MusicDimension.misc
                     return Results.BadRequest(new { message = "Client ID and device name are required when Spotify is enabled." });
 
                 var current = spotify.Configuration;
+                var receiver = request.Receiver ?? current.Receiver;
+                if (receiver == null || receiver.Bitrate is not (96 or 160 or 320)
+                    || string.IsNullOrEmpty(receiver.AudioDevice) || receiver.AudioDevice.Length > 128
+                    || !Regex.IsMatch(receiver.AudioDevice, @"\A[A-Za-z0-9_:,=.\-]+\z"))
+                    return Results.BadRequest(new { message = "Choose 96, 160, or 320 kbps and a valid ALSA audio device (for example default or plughw:CARD=Headphones,DEV=0)." });
+                var deviceName = request.SpotifyDeviceName?.Trim() ?? "";
+                if (deviceName.Length > 100 || deviceName.Any(char.IsControl)
+                    || (request.Receiver != null && deviceName.Length == 0))
+                    return Results.BadRequest(new { message = "Enter a receiver device name between 1 and 100 characters without control characters." });
                 var configuration = new Config
                 {
                     Enable = request.Enable,
                     ClientId = request.ClientId?.Trim() ?? "",
                     ClientSecret = request.ClientSecret ?? current.ClientSecret,
-                    SpotifyDeviceName = request.SpotifyDeviceName?.Trim() ?? "",
+                    SpotifyDeviceName = deviceName,
+                    Receiver = receiver,
                     TokenFileName = current.TokenFileName
                 };
                 try
@@ -128,8 +143,28 @@ namespace MusicDimension.misc
         {
             var configuration = spotify.Configuration;
             return new(configuration.Enable, configuration.ClientId, configuration.SpotifyDeviceName,
-                !string.IsNullOrEmpty(configuration.ClientSecret));
+                !string.IsNullOrEmpty(configuration.ClientSecret), configuration.Receiver);
         }
+
+        private static ReceiverStatusResponse GetReceiverStatus()
+        {
+            if (!OperatingSystem.IsLinux() || !File.Exists("/usr/local/lib/musicdimension/configure-receiver.py"))
+                return new(false, "unmanaged", false, "Receiver management is available after running the Raspberry Pi installer.", null, null, null, null);
+            try
+            {
+                return JsonSerializer.Deserialize<ReceiverStatusResponse>(File.ReadAllText("/var/lib/musicdimension-receiver/status.json"),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new(true, "unknown", false, "Waiting for the receiver configuration service.", null, null, null, null);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+            {
+                return new(true, "unknown", false, "Waiting for the receiver configuration service. Check its systemd logs if this persists.", null, null, null, null);
+            }
+        }
+
+        /// <summary>Receiver runtime and applied configuration reported by the root-owned systemd helper.</summary>
+        public sealed record ReceiverStatusResponse(bool Managed, string ActiveState, bool CredentialsCached, string? Error,
+            string? Name, string? AudioDevice, int? Bitrate, bool? Enabled);
 
         private static async Task<IResult> GetSpotifyDevicesAsync(SpotifyHandler spotify, CancellationToken cancellationToken)
         {
@@ -227,10 +262,10 @@ namespace MusicDimension.misc
         }
 
         /// <summary>Editable Spotify configuration; a null secret preserves its current value.</summary>
-        public sealed record UpdateSpotifySettingsRequest(bool Enable, string? ClientId, string? SpotifyDeviceName, string? ClientSecret);
+        public sealed record UpdateSpotifySettingsRequest(bool Enable, string? ClientId, string? SpotifyDeviceName, string? ClientSecret, ReceiverConfig? Receiver = null);
 
         /// <summary>Spotify settings without credentials or token file paths.</summary>
-        public sealed record SpotifySettingsResponse(bool Enable, string ClientId, string SpotifyDeviceName, bool HasClientSecret);
+        public sealed record SpotifySettingsResponse(bool Enable, string ClientId, string SpotifyDeviceName, bool HasClientSecret, ReceiverConfig Receiver);
 
         private static IResult UpdateTrackControlTags(TrackControlTagsRequest request, MusicConfigStore store)
         {

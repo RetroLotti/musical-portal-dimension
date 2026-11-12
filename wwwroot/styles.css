@@ -89,6 +89,10 @@ h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23px;
 .spotify-toggle input { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--forest-light); }
 .spotify-settings .control-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .spotify-settings .form-message { overflow-wrap: anywhere; }
+.receiver-settings { display: grid; gap: 16px; min-width: 0; margin: 0; padding: 18px 0 0; border: 0; border-top: 1px solid var(--line); }
+.receiver-settings legend { padding: 0 8px 0 0; font-size: 13px; font-weight: 700; }
+.receiver-status-row { display: grid; grid-template-columns: minmax(0, 1fr) 42px; align-items: center; gap: 12px; }
+.receiver-settings:disabled { opacity: .6; }
 .spotify-device-name-row { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 8px; }
 #spotifyAvailableDevices[hidden], #spotifyDevicesLabel[hidden] { display: none; }
 #loadSpotifyDevicesButton:disabled { opacity: .6; cursor: wait; }

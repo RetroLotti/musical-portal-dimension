@@ -502,6 +502,34 @@ async function createTag(event) {
 }
 
 let spotifyDevices = [];
+let receiverManaged = false;
+
+async function loadReceiverStatus() {
+  const status = await request("/api/spotify/receiver");
+  receiverManaged = status.managed;
+  document.querySelector("#receiverSettings").disabled = !receiverManaged;
+  const message = document.querySelector("#receiverStatus");
+  message.classList.toggle("error", Boolean(status.error) && receiverManaged);
+  if (!receiverManaged) {
+    message.textContent = status.error;
+    return;
+  }
+  const name = status.name ? ` - ${status.name}` : "";
+  const audio = status.audioDevice ? ` - ${status.audioDevice}, ${status.bitrate} kbps` : "";
+  message.textContent = status.error ?? `Raspotify: ${status.activeState}${name}${audio}. ${status.credentialsCached ? "Receiver credentials cached." : "Receiver pairing required: select this Pi once in Spotify on the same LAN."}`;
+}
+
+document.querySelector("#refreshReceiverStatus").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await loadReceiverStatus();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
 
 async function loadSpotifyDevices() {
   const button = document.querySelector("#loadSpotifyDevicesButton");
@@ -568,6 +596,10 @@ async function loadSpotifySettings() {
   document.querySelector("#spotifyClientSecret").value = "";
   document.querySelector("#spotifyClientSecret").placeholder = settings.hasClientSecret ? "Saved (unchanged)" : "Not set";
   document.querySelector("#spotifyClearSecret").checked = false;
+  document.querySelector("#receiverEnabled").checked = settings.receiver?.enabled ?? true;
+  document.querySelector("#receiverAudioDevice").value = settings.receiver?.audioDevice ?? "plughw:CARD=Headphones,DEV=0";
+  document.querySelector("#receiverBitrate").value = String(settings.receiver?.bitrate ?? 160);
+  await loadReceiverStatus();
   await loadSpotifyAuthorization();
 }
 
@@ -674,12 +706,17 @@ async function saveSpotifySettings(event) {
         spotifyDeviceName: document.querySelector("#spotifyDeviceName").value,
         clientId: document.querySelector("#spotifyClientId").value,
         clientSecret: document.querySelector("#spotifyClearSecret").checked
-          ? "" : document.querySelector("#spotifyClientSecret").value || null
+          ? "" : document.querySelector("#spotifyClientSecret").value || null,
+        receiver: receiverManaged ? {
+          enabled: document.querySelector("#receiverEnabled").checked,
+          audioDevice: document.querySelector("#receiverAudioDevice").value.trim(),
+          bitrate: Number(document.querySelector("#receiverBitrate").value)
+        } : null
       })
     });
     if (editingUid && sourceSelect.value === "spotify" && !document.querySelector("#spotifyEnable").checked) cancelEdit();
     await Promise.all([loadSpotifySettings(), refresh()]);
-    message.textContent = "Spotify settings saved";
+    message.textContent = receiverManaged ? "Spotify settings saved; receiver changes apply in up to 30 seconds." : "Spotify settings saved";
     showToast("Spotify settings saved");
   } catch (error) {
     message.classList.add("error");

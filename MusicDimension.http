@@ -1,5 +1,24 @@
 @baseUrl = http://127.0.0.1:5080
 
+### Managed Raspotify receiver status and last applied settings
+GET {{baseUrl}}/api/spotify/receiver
+
+### Update Spotify and receiver settings (use your client ID)
+PUT {{baseUrl}}/api/settings/spotify
+Content-Type: application/json
+
+{
+  "enable": false,
+  "clientId": "YOUR_CLIENT_ID",
+  "spotifyDeviceName": "Music Dimension",
+  "clientSecret": null,
+  "receiver": {
+    "enabled": true,
+    "audioDevice": "plughw:CARD=Headphones,DEV=0",
+    "bitrate": 160
+  }
+}
+
 ### Read exact Spotify device names without changing playback
 GET {{baseUrl}}/api/spotify/devices
 

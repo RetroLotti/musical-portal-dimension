@@ -16,7 +16,22 @@
         [JsonProperty("spotifyDeviceName")]
         public string SpotifyDeviceName { get; set; } = null!;
 
+        [JsonProperty("receiver")]
+        public ReceiverConfig Receiver { get; set; } = new();
+
         [JsonIgnore]
         public string TokenFileName { get; set; } = null!;
+    }
+
+    public class ReceiverConfig
+    {
+        [JsonProperty("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [JsonProperty("audioDevice")]
+        public string AudioDevice { get; set; } = "plughw:CARD=Headphones,DEV=0";
+
+        [JsonProperty("bitrate")]
+        public int Bitrate { get; set; } = 160;
     }
 }

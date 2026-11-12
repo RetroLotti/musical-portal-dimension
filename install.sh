@@ -27,6 +27,17 @@ case "${ARCHITECTURE}" in
         ;;
 esac
 
+if [[ "${ARCHITECTURE}" == "armhf" && "$(uname -m)" == armv6* ]]; then
+    echo "Current Raspotify requires ARMv7 or newer. Pi 1 and original Pi Zero are not supported." >&2
+    exit 1
+fi
+
+if systemctl is-active --quiet librespot.service || systemctl is-enabled --quiet librespot.service; then
+    echo "A standalone librespot service is running or enabled. Stop/disable it before installing Raspotify:" >&2
+    echo "  sudo systemctl disable --now librespot.service" >&2
+    exit 1
+fi
+
 echo "Detected ${ARCHITECTURE}; selecting ${RUNTIME_ID}."
 echo "Installing native USB/audio dependencies..."
 apt-get update
@@ -41,6 +52,16 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     tar \
     vlc-plugin-base
 
+echo "Installing Raspotify (includes librespot) from its signed APT repository..."
+install -d -m 0755 /usr/share/keyrings
+curl --fail --location --retry 3 --silent --show-error \
+    https://dtcooper.github.io/raspotify/key.asc -o /usr/share/keyrings/raspotify_key.asc
+chmod 0644 /usr/share/keyrings/raspotify_key.asc
+printf '%s\n' 'deb [signed-by=/usr/share/keyrings/raspotify_key.asc] https://dtcooper.github.io/raspotify raspotify main' \
+    > /etc/apt/sources.list.d/raspotify.list
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y raspotify avahi-daemon alsa-utils
+
 for group in plugdev audio; do
     if ! getent group "${group}" >/dev/null; then
         groupadd --system "${group}"
@@ -52,6 +73,16 @@ if ! id "${SERVICE_USER}" >/dev/null 2>&1; then
 fi
 usermod -aG plugdev,audio "${SERVICE_USER}"
 
+TEMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TEMP_DIR}"' EXIT
+
+if [[ -n "${MUSICDIMENSION_PUBLISH_DIR:-}" ]]; then
+    PUBLISH_DIR="$(realpath "${MUSICDIMENSION_PUBLISH_DIR}")"
+    if [[ ! -f "${PUBLISH_DIR}/MusicDimension" || "${PUBLISH_DIR}" == "${INSTALL_DIR}" ]]; then
+        echo "MUSICDIMENSION_PUBLISH_DIR must be a separate published build directory containing MusicDimension." >&2
+        exit 1
+    fi
+else
 API_URL="$(python3 - "${REPOSITORY}" "${VERSION}" <<'PY'
 import sys
 import urllib.parse
@@ -64,9 +95,6 @@ else:
     print(f"https://api.github.com/repos/{repository}/releases/tags/{encoded_version}")
 PY
 )"
-
-TEMP_DIR="$(mktemp -d)"
-trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 ASSET_URL="$(python3 - "${API_URL}" "${RUNTIME_ID}" <<'PY'
 import json
@@ -147,6 +175,7 @@ PY
     "${TEMP_DIR}/dotnet/dotnet" publish "${PROJECT_FILE}" --framework net10.0 --runtime linux-arm64 --configuration Release --self-contained true --output "${TEMP_DIR}/publish"
     PUBLISH_DIR="${TEMP_DIR}/publish"
 fi
+fi
 
 SERVICE_FILE="${PUBLISH_DIR}/deploy/raspberry-pi/musicdimension.service"
 UDEV_FILE="${PUBLISH_DIR}/deploy/raspberry-pi/99-lego-dimensions.rules"
@@ -154,8 +183,16 @@ if [[ ! -f "${SERVICE_FILE}" || ! -f "${UDEV_FILE}" ]]; then
     echo "The release is missing the Raspberry Pi service or USB rule." >&2
     exit 1
 fi
+for receiver_file in configure-receiver.py musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer raspotify-musicdimension.conf; do
+    if [[ ! -f "${PUBLISH_DIR}/deploy/raspberry-pi/${receiver_file}" ]]; then
+        echo "Release lacks receiver integration (${receiver_file}). Use a release containing the new installer support." >&2
+        exit 1
+    fi
+done
 
 mkdir -p "${INSTALL_DIR}/config" "${INSTALL_DIR}/media"
+chown root:root "${INSTALL_DIR}"
+chmod 0755 "${INSTALL_DIR}"
 for data_directory in config media; do
     if [[ -d "${PUBLISH_DIR}/${data_directory}" ]]; then
         cp -an "${PUBLISH_DIR}/${data_directory}/." "${INSTALL_DIR}/${data_directory}/"
@@ -181,13 +218,40 @@ done
 shopt -u dotglob nullglob
 
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}/config" "${INSTALL_DIR}/media"
+python3 - "${INSTALL_DIR}/config/config.json" <<'PY'
+import json
+import os
+import socket
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as source:
+    config = json.load(source)
+if not config.get("spotifyDeviceName", "").strip():
+    config["spotifyDeviceName"] = "Music Dimension (" + socket.gethostname() + ")"
+config.setdefault("receiver", {"enabled": True, "audioDevice": "plughw:CARD=Headphones,DEV=0", "bitrate": 160})
+with open(path, "w", encoding="utf-8") as output:
+    json.dump(config, output, indent=2)
+os.chmod(path, 0o600)
+PY
 chmod 0755 "${INSTALL_DIR}/MusicDimension"
 install -m 0644 "${UDEV_FILE}" /etc/udev/rules.d/99-lego-dimensions.rules
 install -m 0644 "${SERVICE_FILE}" "/etc/systemd/system/${SERVICE_NAME}.service"
+install -d -o root -g root -m 0755 /usr/local/lib/musicdimension /etc/systemd/system/raspotify.service.d /var/lib/musicdimension-receiver
+install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/configure-receiver.py" /usr/local/lib/musicdimension/configure-receiver.py
+for unit in musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
+    install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/${unit}" "/etc/systemd/system/${unit}"
+done
+install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/raspotify-musicdimension.conf" \
+    /etc/systemd/system/raspotify.service.d/musicdimension.conf
+install -d -m 0755 /etc/raspotify
 
 udevadm control --reload-rules
 udevadm trigger --subsystem-match=usb
 systemctl daemon-reload
+systemctl enable --now avahi-daemon.service
+systemctl start musicdimension-receiver.service
+systemctl enable --now musicdimension-receiver.path musicdimension-receiver.timer
 systemctl enable --now "${SERVICE_NAME}"
 
 if ! systemctl is-active --quiet "${SERVICE_NAME}"; then
@@ -200,5 +264,7 @@ echo
 echo "Music Dimension is installed and will start automatically at boot."
 echo "Service status: systemctl status ${SERVICE_NAME}"
 echo "Logs:           journalctl -u ${SERVICE_NAME} -f"
-echo "Web manager:    http://127.0.0.1:5080 (use an SSH tunnel from another computer)."
-echo "Spotify is disabled by default; configure config/config.json and complete OAuth interactively before enabling it."
+echo "Web manager:    http://<pi-ip-address>:5080 (trusted LAN only; or use an SSH tunnel)."
+echo "Raspotify is installed with persistent credentials. Pair it once from Spotify on the same LAN."
+echo "Configure the receiver and connect the Spotify Web API account in the web manager's Spotify settings."
+echo "Receiver logs:  journalctl -u raspotify -f"

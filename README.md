@@ -5,21 +5,11 @@ Steps in order to get things started:
 - install Raspberry Pi OS via Raspberry Pi Imager
 ![image](https://github.com/user-attachments/assets/0caa167a-4c3f-4eee-9cff-778317b3828f)
 
-- connect via ssh or however you like and install librespot
-  - sudo apt update && sudo apt upgrade -y
-  - curl https://sh.rustup.rs -sSf | sh
-  - cargo install librespot
-- configure librespot
-  - (validation needed)
-  - sudo nano /etc/systemd/system/librespot.service
-  - 
-
-- download linux version of musical dimension
+- connect via SSH and run `sudo bash install.sh`; this installs MusicDimension, Raspotify (including librespot), audio/USB dependencies, and boot services
 - create app in [spotify developer dashboard](https://developer.spotify.com/dashboard)
 
-- note clientid ( and secret)
-- update config.json
-- also update music.cfg.json for your hearing pleasure
+- configure Spotify and the receiver through the web manager's **Spotify settings** tab
+- pair the receiver once in the Spotify phone/desktop app on the same LAN; receiver credentials are retained across reboots
 - connect Lego dimensions portal
 - start musical dimension
 - 
@@ -28,7 +18,9 @@ Steps in order to get things started:
 
 The Pi 3 Model B can run either 32-bit ARM (`linux-arm`) or 64-bit ARM (`linux-arm64`). Raspberry Pi OS 64-bit is recommended; the application cross-publishes successfully for both targets. The deployment is self-contained, but VLC and libusb must be installed from Raspberry Pi OS because this project does not bundle Linux VLC libraries.
 
-To install the latest published Pi build and enable its daemon at boot, copy `install.sh` to the Pi and run `sudo bash install.sh`. It detects `arm64` versus `armhf`, installs native packages, preserves existing config and media on reinstall, and enables the systemd service. To install a specific release, pass its exact GitHub tag, for example `sudo bash install.sh v1.2.3`. Published builds contain their matching self-contained .NET runtime. If no release exists yet, the script downloads the .NET 10 SDK temporarily and builds from source on 64-bit Pi OS; 32-bit ARM requires a published `linux-arm` release asset.
+To install the latest published Pi build and enable its daemon at boot, copy `install.sh` to the Pi and run `sudo bash install.sh`. It detects `arm64` versus `armhf`, installs native packages and Raspotify from its signed upstream APT repository, preserves existing config/media and receiver credentials on reinstall, and enables the systemd services. Raspotify already includes librespot; do not install a second copy. If `librespot.service` is running or enabled, the installer stops with instructions to disable that conflicting service first. ARMv6 Pi 1/original Pi Zero are not supported. The current Raspotify package targets current Debian Stable; older Raspberry Pi OS versions may need an OS upgrade if APT reports incompatible dependencies.
+
+To install a specific release, pass its exact GitHub tag, for example `sudo bash install.sh v1.2.3`. Use a release that contains the receiver integration files; the installer rejects older archives missing these files. Published builds contain their matching self-contained .NET runtime. If no release exists yet, the script downloads the .NET 10 SDK temporarily and builds from source on 64-bit Pi OS; 32-bit ARM requires a published `linux-arm` release asset.
 
 ### Publish
 
@@ -44,28 +36,10 @@ Copy the `publish` directory to the Pi, for example to `/tmp/musicdimension-publ
 
 ### Install And Start At Boot
 
-On Raspberry Pi OS, install the native libraries and create the service account:
+For a locally published build, copy the matching installer to the Pi and use the same integrated installation process:
 
 ```sh
-sudo apt update
-sudo apt install -y libusb-1.0-0 libusb-1.0-0-dev libvlc5 libvlc-dev vlc-plugin-base
-getent group plugdev >/dev/null || sudo groupadd --system plugdev
-sudo useradd --system --user-group --home-dir /var/lib/musicdimension --create-home --shell /usr/sbin/nologin musicdimension
-sudo usermod -aG plugdev,audio musicdimension
-```
-
-Install the publish output and the supplied USB rule/service:
-
-```sh
-sudo mkdir -p /opt/musicdimension
-sudo cp -a /tmp/musicdimension-publish/. /opt/musicdimension/
-sudo chown -R musicdimension:musicdimension /opt/musicdimension
-sudo install -m 0644 /opt/musicdimension/deploy/raspberry-pi/99-lego-dimensions.rules /etc/udev/rules.d/99-lego-dimensions.rules
-sudo install -m 0644 /opt/musicdimension/deploy/raspberry-pi/musicdimension.service /etc/systemd/system/musicdimension.service
-sudo udevadm control --reload-rules
-sudo udevadm trigger --subsystem-match=usb
-sudo systemctl daemon-reload
-sudo systemctl enable --now musicdimension
+sudo env MUSICDIMENSION_PUBLISH_DIR=/tmp/musicdimension-publish bash install.sh
 ```
 
 The unit runs as the unprivileged `musicdimension` user, restarts on failure, and starts automatically at boot. It needs write access to `/opt/musicdimension/config` and `/opt/musicdimension/media` for tag edits and uploads. Check its state and logs with:
@@ -80,6 +54,18 @@ The systemd service selects VLC's ALSA output directly so it does not depend on 
 The LEGO Dimensions Toy Pad rule uses vendor/product `0e6f:0241` and grants access to the `plugdev` group. Replug the portal or reboot after installing it. This rule follows the identifier documented by the [LegoDimensions Linux driver instructions](https://github.com/Ellerbach/LegoDimensions/blob/main/linux-driver-rules/99-lego-dimensions.rules).
 
 ### Spotify Settings And Login
+
+#### Managed Pi Receiver
+
+The installer automatically configures Raspotify to start at boot, enables LAN discovery and persistent credential caching, and disables audio-file caching to reduce SD-card writes. Credentials stay in `/var/lib/raspotify`, separate from the application's Web API tokens. Existing `/etc/raspotify/conf` is preserved; a managed drop-in overrides only the name, ALSA backend/device, bitrate and cache locations, and ensures discovery/credential caching are enabled. The installer uses your configured Spotify device name or assigns `Music Dimension (<hostname>)` if it is blank.
+
+In **Spotify settings**, the **Pi Spotify Connect receiver** controls let you enable/disable Raspotify, choose an ALSA output (default `plughw:CARD=Headphones,DEV=0`), and select 96/160/320 kbps. **Device name** is shared with the receiver so playback targets the same name it advertises. Save settings to apply; changes restart only Raspotify and may interrupt Spotify playback. A root-owned, constrained systemd helper applies validated settings within 30 seconds; the web application does not run as root or have sudo access. The status refresh shows the running state, last applied settings, and whether receiver credentials are cached. Unchanged settings do not restart playback. Disabling app Spotify support is separate from disabling the receiver.
+
+Pair once from Spotify on a phone/desktop on the same LAN, using the same Premium account as the website's OAuth login. Select the configured Pi receiver in Spotify's device picker; after pairing, refresh receiver status and confirm credentials are cached. On later boots those credentials are reused. First consent/pairing cannot be silently provisioned from the website's client ID, secret, or Web API refresh token. Password authentication is not supported by current librespot. Account revocation or Spotify protocol changes can still require pairing again. Do not copy credentials into the web form.
+
+To inspect ALSA outputs, run `aplay -L` on the Pi. `default` or `plughw:CARD=vc4hdmi,DEV=0` may be appropriate for your setup. This setting controls Raspotify only; VLC's local-file output is configured separately in `musicdimension.service`. Some ALSA devices permit only one player at a time.
+
+Receiver management is available only after running the updated Pi installer. Keep the web manager on a trusted LAN or SSH tunnel: anyone with access can change the receiver configuration. The helper is installed outside the app-writable directories and can change only its fixed receiver configuration and service. It never accepts arbitrary commands, shell snippets, file paths, or credentials from the browser.
 
 Next to **Device name**, click the refresh icon (**Find Spotify devices**) to load the exact names visible to your Spotify account. Choose your Pi from **Available Spotify devices**, then click **Save Spotify settings**. Active devices are marked; restricted devices are shown but cannot be selected because Spotify does not allow controlling them. Loading devices never transfers playback or changes the saved name. Manual name entry remains available. This read-only lookup also works with Spotify playback disabled, but requires account authorization. If no Pi appears, its librespot/raspotify receiver must be running and signed in before Spotify can list it.
 
@@ -127,13 +113,15 @@ There are two separate logins: MusicDimension's Web API OAuth tokens and the lib
 If the Pi still only works after selecting it on your phone, check the receiver immediately after reboot, before opening the phone app:
 
 ```sh
-systemctl status librespot
-journalctl -b -u librespot --no-pager
-systemctl cat librespot
-# If using raspotify instead, substitute raspotify for librespot above.
+systemctl status raspotify musicdimension-receiver.path musicdimension-receiver.timer
+journalctl -b -u raspotify --no-pager
+journalctl -b -u musicdimension-receiver.service --no-pager
+systemctl cat raspotify
 ```
 
-Ensure the receiver service is enabled at boot, can reach Spotify, and uses the exact device name saved in the web manager. Configure persistent authentication/cache according to your installed librespot/raspotify version, with the cache owned by its service user and available at boot. An unauthenticated receiver that only advertises through local discovery may need a phone connection before Spotify's Web API can see it; MusicDimension cannot wake or sign in such a receiver. The receiver service/cache configuration is not installed or managed by this repository. Spotify Web API playback also requires Spotify Premium and the appropriate app/account access.
+Ensure Raspotify can reach Spotify and the phone can reach the Pi over LAN discovery (mDNS UDP 5353; do not open it to the internet). The installer does not change firewall rules. A receiver that has not been paired may only appear after phone selection. Credential caching is configured by the installer, but initial account pairing still requires the Spotify app. Spotify Web API playback also requires Premium and the appropriate app/account access. Raspotify is a third-party receiver, so installation cannot guarantee compatibility with future Spotify protocol changes; upstream currently documents possible Audio Key errors. Check the [Raspotify troubleshooting guide](https://github.com/dtcooper/raspotify/wiki/Troubleshooting) if the receiver starts but cannot play.
+
+Receiver helper checks: `python3 -m unittest discover -s tests -p test_receiver_configuration.py -v`. Linux additionally checks that a symlinked configuration is rejected. Pi acceptance checks still required: run the installer, pair once, confirm cached credentials, reboot without opening the phone app, scan a Spotify tag, and verify audio and device visibility. Verify output changes and receiver disable/enable from the website.
 
 Cross-publishing validates the managed application and package restore for both ARM RIDs. Actual portal USB access and audio output still require a test on the Pi 3 hardware and its installed Raspberry Pi OS/VLC packages.
   
