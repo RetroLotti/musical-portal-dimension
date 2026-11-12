@@ -150,7 +150,8 @@
 
             Console.WriteLine($"{uid} | {e.LegoTag?.GetType().Name} | {e.LegoTag?.Name}");
 
-            if (_pausedTagUid != null)
+            var isControlTag = _musicStore.Snapshot().ControlTags.TryGetValue(uid, out var controlAction);
+            if (_pausedTagUid != null && !isControlTag)
             {
                 if (string.Equals(uid, _pausedTagUid, StringComparison.OrdinalIgnoreCase))
                 {
@@ -182,9 +183,9 @@
             }
 
             // check if tag is control tag
-            if (_musicStore.Snapshot().ControlTags.TryGetValue(uid, out var value))
+            if (isControlTag)
             {
-                switch (value)
+                switch (MusicConfigStore.NormalizeControlAction(controlAction!))
                 {
                     case "next":
                     case "forward":
@@ -201,8 +202,17 @@
                     case "pause":
                         await PausePlaybackAsync();
                         return;
+                    case "volumeup":
+                        await ChangeVolumeAsync(10);
+                        return;
+                    case "volumedown":
+                        await ChangeVolumeAsync(-10);
+                        return;
+                    case "shuffle":
+                        await ToggleShuffleAsync();
+                        return;
                     default:
-                        Console.WriteLine($"Unknown control action '{value}' for tag {uid}.");
+                        Console.WriteLine($"Unknown control action '{controlAction}' for tag {uid}.");
                         return;
                 }
             }
@@ -282,6 +292,24 @@
             {
                 Console.WriteLine("No active playlist to control.");
             }
+        }
+
+        private static async Task ChangeVolumeAsync(int delta)
+        {
+            if (_currentPlaybackSource == SourceTypes.Spotify && _spotifyHandler.Configuration.Enable)
+                await _spotifyHandler.ChangeVolumeAsync(delta);
+            else if (_currentPlaybackSource == SourceTypes.Local)
+                _localMusicHandler.ChangeVolume(delta);
+            else Console.WriteLine("No playback volume to control.");
+        }
+
+        private static async Task ToggleShuffleAsync()
+        {
+            if (_currentPlaybackSource == SourceTypes.Spotify && _spotifyHandler.Configuration.Enable)
+                await _spotifyHandler.ToggleShuffleAsync();
+            else if (_currentPlaybackSource == SourceTypes.Local)
+                _localMusicHandler.ToggleShuffle();
+            else Console.WriteLine("No playlist to shuffle.");
         }
 
         private static async Task PausePlaybackAsync()

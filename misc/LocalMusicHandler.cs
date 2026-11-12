@@ -8,6 +8,8 @@
         private MediaPlayer Player { get; }
         private readonly object _playlistLock = new();
         private List<string> _tracks = [];
+        private List<int> _playOrder = [];
+        private bool _shuffle;
         private int _currentTrackIndex = -1;
         private Media? _currentMedia;
 
@@ -43,6 +45,9 @@
             {
                 Player.Stop();
                 _tracks = tracks;
+                var order = Enumerable.Range(0, tracks.Count).ToArray();
+                if (_shuffle) Random.Shared.Shuffle(order);
+                _playOrder = order.ToList();
                 _currentTrackIndex = 0;
                 PlayCurrentTrack();
             }
@@ -54,6 +59,7 @@
             {
                 Player.Stop();
                 _tracks = [];
+                _playOrder = [];
                 _currentTrackIndex = -1;
                 _currentMedia?.Dispose();
                 _currentMedia = null;
@@ -89,6 +95,28 @@
 
                 _currentTrackIndex--;
                 PlayCurrentTrack();
+            }
+        }
+
+        public void ChangeVolume(int delta)
+        {
+            lock (_playlistLock)
+            {
+                var volume = Player.Volume;
+                if (volume >= 0) Player.Volume = (int)Math.Clamp((long)volume + delta, 0, 100);
+            }
+        }
+
+        public void ToggleShuffle()
+        {
+            lock (_playlistLock)
+            {
+                _shuffle = !_shuffle;
+                var remaining = _playOrder.Skip(_currentTrackIndex + 1).ToArray();
+                if (_shuffle) Random.Shared.Shuffle(remaining);
+                else Array.Sort(remaining);
+                _playOrder.RemoveRange(_currentTrackIndex + 1, remaining.Length);
+                _playOrder.AddRange(remaining);
             }
         }
 
@@ -156,7 +184,7 @@
         private void PlayCurrentTrack()
         {
             _currentMedia?.Dispose();
-            _currentMedia = new Media(Library, _tracks[_currentTrackIndex], FromType.FromPath);
+            _currentMedia = new Media(Library, _tracks[_playOrder[_currentTrackIndex]], FromType.FromPath);
             Player.Play(_currentMedia);
         }
 

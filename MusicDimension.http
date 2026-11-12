@@ -1,5 +1,17 @@
 @baseUrl = http://127.0.0.1:5080
 
+### Configure unique playback control tags (blank fields clear assignments)
+PUT {{baseUrl}}/api/control-tags
+Content-Type: application/json
+
+{
+  "forwardUid": "10-11",
+  "rewindUid": "20-21",
+  "volumeUpUid": "30-31",
+  "volumeDownUid": "40-41",
+  "shuffleUid": "50-51"
+}
+
 ### Create a tag with an ordered Spotify track queue (replace example IDs)
 POST {{baseUrl}}/api/tags
 Content-Type: application/json

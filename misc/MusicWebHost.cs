@@ -269,22 +269,27 @@ namespace MusicDimension.misc
 
         private static IResult UpdateTrackControlTags(TrackControlTagsRequest request, MusicConfigStore store)
         {
-            var forwardUid = NormalizeUid(request.ForwardUid);
-            var rewindUid = NormalizeUid(request.RewindUid);
-            if ((!string.IsNullOrWhiteSpace(request.ForwardUid) && forwardUid == null)
-                || (!string.IsNullOrWhiteSpace(request.RewindUid) && rewindUid == null))
+            var controls = new Dictionary<string, string?>();
+            var values = new[] { ("next", request.ForwardUid), ("previous", request.RewindUid),
+                ("volumeup", request.VolumeUpUid), ("volumedown", request.VolumeDownUid), ("shuffle", request.ShuffleUid) };
+            foreach (var (action, value) in values)
             {
-                return Results.BadRequest(new { message = "Enter valid hexadecimal tag UIDs." });
+                if (value == null && action is not ("next" or "previous")) continue;
+                var normalized = NormalizeUid(value);
+                if (!string.IsNullOrWhiteSpace(value) && normalized == null)
+                    return Results.BadRequest(new { message = "Enter valid hexadecimal tag UIDs." });
+                controls[action] = normalized;
             }
 
-            if (forwardUid != null && string.Equals(forwardUid, rewindUid, StringComparison.OrdinalIgnoreCase))
+            var assignedUids = controls.Values.Where(uid => uid != null).ToList();
+            if (assignedUids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != assignedUids.Count)
             {
-                return Results.BadRequest(new { message = "Forward and rewind must use different tags." });
+                return Results.BadRequest(new { message = "Each playback control must use a different tag." });
             }
 
             try
             {
-                store.SetTrackControlTags(forwardUid, rewindUid);
+                store.SetControlTags(controls);
             }
             catch (Exception exception)
             {
@@ -548,6 +553,7 @@ namespace MusicDimension.misc
 
     /// <summary>A Spotify item in a tag's saved playback order.</summary>
     public sealed record SpotifyTagItemRequest(string? Name, SpotifyTypes? SpotifyType, string? SpotifyId);
-    public sealed record TrackControlTagsRequest(string? ForwardUid, string? RewindUid);
+    public sealed record TrackControlTagsRequest(string? ForwardUid, string? RewindUid,
+        string? VolumeUpUid = null, string? VolumeDownUid = null, string? ShuffleUid = null);
     public sealed record MediaFileInfo(string Name, string Path, string Extension, long Size);
 }

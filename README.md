@@ -52,6 +52,12 @@ The systemd service selects VLC's ALSA output directly so it does not depend on 
 
 The LEGO Dimensions Toy Pad rule uses vendor/product `0e6f:0241` and grants access to the `plugdev` group. Replug the portal or reboot after installing it. This rule follows the identifier documented by the [LegoDimensions Linux driver instructions](https://github.com/Ellerbach/LegoDimensions/blob/main/linux-driver-rules/99-lego-dimensions.rules).
 
+### Playback Control Tags
+
+In **Playback controls**, scan or enter a different UID for each action, then click **Save controls**. Leave a field blank to remove its assignment. Forward/rewind, **Volume up**, **Volume down**, and **Toggle shuffle** work with both local and Spotify playback. Volume changes by 10 percentage points per presentation and is limited to 0–100. Spotify volume control requires the configured device to expose its current playback volume; another active device is never controlled instead.
+
+Shuffle is a toggle. For local queues it randomizes the unplayed tracks without interrupting the current track or repeating already played entries; turning it off restores the remaining tracks' saved order. If local shuffle is still enabled when another tag starts, its queue starts shuffled. Spotify shuffle toggles the configured device's current shuffle state. Control tags can also operate on a paused music tag without losing its resume state. Shuffle state is a playback setting, not a rewrite of the tag's saved track list.
+
 ### Spotify Settings And Login
 
 #### Managed Pi Receiver
@@ -101,7 +107,7 @@ Keep `config/tokens.json` readable/writable by the `musicdimension` service user
 
 ### Search Spotify For A Tag
 
-In **Tags & music**, choose **Spotify** as the playback source, then **Search Spotify**. Selecting a result adds it to the tag's playback queue; if the tag name is blank, it is filled from the result too. Repeat to add up to 100 individual Spotify tracks in your chosen order. For manual entry, choose the type, enter its ID, and click **Add Spotify item**. Save the tag to keep its ordered queue. Existing single-track tags remain editable.
+In **Tags & music**, choose **Spotify** as the playback source, then **Search Spotify**. Selecting a result adds it to the tag's playback queue; if the tag name is blank, it is filled from the result too. After adding a track the dialog stays open, and the search field is focused with all text selected so you can type the next search immediately. Close the dialog when finished. Repeat to add up to 100 individual Spotify tracks in your chosen order. Album/playlist selection still closes the dialog. For manual entry, choose the type, enter its ID, and click **Add Spotify item**. Save the tag to keep its ordered queue. Existing single-track tags remain editable.
 
 Both local and Spotify queues support drag-and-drop using the grip beside each track, with mouse or touch. Drop markers show the insertion point, and the list scrolls when dragging near its top or bottom. Escape cancels a drag. The up/down buttons remain available for keyboard reordering, and the remove button deletes an item from the tag's queue. Save changes to persist the order; Spotify receives the complete ordered track list when the tag is played.
 

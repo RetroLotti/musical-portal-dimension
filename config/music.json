@@ -66,13 +66,6 @@
       "name": "Random Shit",
       "songs": [
         {
-          "name": "Sanctified with Dynamite",
-          "type": "spotify",
-          "path": null,
-          "spotifyType": "track",
-          "spotifyId": "2ZUUturolW3VpzXWzPEy2X"
-        },
-        {
           "name": "Verteidiger des Blödsinns",
           "type": "spotify",
           "path": null,
@@ -80,11 +73,32 @@
           "spotifyId": "18dgCFKITVogAIDL80kNoH"
         },
         {
+          "name": "Sanctified with Dynamite",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "2ZUUturolW3VpzXWzPEy2X"
+        },
+        {
+          "name": "Hundi",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "3MG41H7SMuPeHwAFvZEpHa"
+        },
+        {
           "name": "Pommesgabel",
           "type": "spotify",
           "path": null,
           "spotifyType": "track",
           "spotifyId": "7GqSADuSLxMkdwcWc1bR0c"
+        },
+        {
+          "name": "Ich fühl' mich Disco",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "2zUKhXh78KzEnC7NzigNjn"
         }
       ]
     }

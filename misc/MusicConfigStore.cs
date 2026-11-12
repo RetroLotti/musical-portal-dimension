@@ -112,20 +112,26 @@ namespace MusicDimension.misc
 
         public void SetTrackControlTags(string? forwardUid, string? rewindUid)
         {
+            SetControlTags(new Dictionary<string, string?> { ["next"] = forwardUid, ["previous"] = rewindUid });
+        }
+
+        public void SetControlTags(IReadOnlyDictionary<string, string?> controlTags)
+        {
             lock (_sync)
             {
                 var previous = _config.ControlTags;
                 var configuredUids = new HashSet<string>(
-                    new[] { forwardUid, rewindUid }.Where(uid => uid != null)!,
+                    controlTags.Values.Where(uid => uid != null)!,
                     StringComparer.OrdinalIgnoreCase);
                 var updated = previous
-                    .Where(pair => !string.Equals(pair.Value, "next", StringComparison.OrdinalIgnoreCase)
-                        && !string.Equals(pair.Value, "previous", StringComparison.OrdinalIgnoreCase)
+                    .Where(pair => !controlTags.ContainsKey(NormalizeControlAction(pair.Value))
                         && !configuredUids.Contains(pair.Key))
                     .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
 
-                if (forwardUid != null) updated[forwardUid] = "next";
-                if (rewindUid != null) updated[rewindUid] = "previous";
+                foreach (var (action, uid) in controlTags)
+                {
+                    if (uid != null) updated[uid] = action;
+                }
 
                 _config.ControlTags = updated;
                 try
@@ -139,6 +145,15 @@ namespace MusicDimension.misc
                 }
             }
         }
+
+        public static string NormalizeControlAction(string action) => action.ToLowerInvariant() switch
+        {
+            "forward" => "next",
+            "rewind" => "previous",
+            "volumneup" => "volumeup",
+            "volumnedown" => "volumedown",
+            var value => value
+        };
 
         private void Save()
         {

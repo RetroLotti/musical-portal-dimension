@@ -384,6 +384,31 @@
             });
         }
 
+        public async Task ChangeVolumeAsync(int delta)
+        {
+            await ExecuteAsync(async spotify =>
+            {
+                var deviceId = await GetDeviceIdAsync(spotify);
+                var playback = await spotify.Player.GetCurrentPlayback();
+                if (playback?.Device?.Id != deviceId || playback.Device.VolumePercent == null)
+                    throw new InvalidOperationException("The configured Spotify device has no controllable playback volume.");
+                var volume = (int)Math.Clamp((long)playback.Device.VolumePercent.Value + delta, 0, 100);
+                await spotify.Player.SetVolume(new PlayerVolumeRequest(volume) { DeviceId = deviceId });
+            });
+        }
+
+        public async Task ToggleShuffleAsync()
+        {
+            await ExecuteAsync(async spotify =>
+            {
+                var deviceId = await GetDeviceIdAsync(spotify);
+                var playback = await spotify.Player.GetCurrentPlayback();
+                if (playback?.Device?.Id != deviceId)
+                    throw new InvalidOperationException("The configured Spotify device has no playback to shuffle.");
+                await spotify.Player.SetShuffle(new PlayerShuffleRequest(!playback.ShuffleState) { DeviceId = deviceId });
+            });
+        }
+
         public async Task StopAsync()
         {
             await PauseAsync();

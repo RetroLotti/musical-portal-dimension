@@ -116,6 +116,9 @@ async function refresh() {
   spotifyEnabled = status.spotifyEnabled;
   document.querySelector("#forwardUid").value = configuredControlUid("next");
   document.querySelector("#rewindUid").value = configuredControlUid("previous");
+  document.querySelector("#volumeUpUid").value = configuredControlUid("volumeup");
+  document.querySelector("#volumeDownUid").value = configuredControlUid("volumedown");
+  document.querySelector("#shuffleUid").value = configuredControlUid("shuffle");
   renderTags();
   const readerStatus = document.querySelector("#readerStatus");
   const readerIndicator = document.querySelector("#readerIndicator");
@@ -131,7 +134,8 @@ async function refresh() {
 }
 
 function configuredControlUid(action) {
-  return Object.entries(library.controlTags ?? {}).find(([, value]) => value.toLowerCase() === action)?.[0] ?? "";
+  const aliases = { forward: "next", rewind: "previous", volumneup: "volumeup", volumnedown: "volumedown" };
+  return Object.entries(library.controlTags ?? {}).find(([, value]) => (aliases[value.toLowerCase()] ?? value.toLowerCase()) === action)?.[0] ?? "";
 }
 
 function updateSourceFields() {
@@ -504,20 +508,24 @@ async function captureUid(input, button) {
 }
 
 async function saveControlTags() {
-  const forwardUid = document.querySelector("#forwardUid").value.trim();
-  const rewindUid = document.querySelector("#rewindUid").value.trim();
-  const normalizedForward = forwardUid ? normalizedUid(forwardUid) : "";
-  const normalizedRewind = rewindUid ? normalizedUid(rewindUid) : "";
+  const inputs = ["forwardUid", "rewindUid", "volumeUpUid", "volumeDownUid", "shuffleUid"];
+  const payload = {};
   const message = document.querySelector("#controlMessage");
   const button = document.querySelector("#saveControlsButton");
   message.textContent = "";
-  if ((forwardUid && !normalizedForward) || (rewindUid && !normalizedRewind)) {
-    message.textContent = "Enter valid hexadecimal tag UIDs.";
-    message.classList.add("error");
-    return;
+  for (const id of inputs) {
+    const value = document.getElementById(id).value.trim();
+    const normalized = value ? normalizedUid(value) : "";
+    if (normalized === null) {
+      message.textContent = "Enter valid hexadecimal tag UIDs.";
+      message.classList.add("error");
+      return;
+    }
+    payload[id] = normalized;
   }
-  if (normalizedForward && normalizedForward === normalizedRewind) {
-    message.textContent = "Forward and rewind must use different tags.";
+  const assignedUids = Object.values(payload).filter(Boolean);
+  if (new Set(assignedUids).size !== assignedUids.length) {
+    message.textContent = "Each playback control must use a different tag.";
     message.classList.add("error");
     return;
   }
@@ -527,7 +535,7 @@ async function saveControlTags() {
     await request("/api/control-tags", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ forwardUid: normalizedForward, rewindUid: normalizedRewind })
+      body: JSON.stringify(payload)
     });
     message.classList.remove("error");
     message.textContent = "Controls saved";
@@ -874,8 +882,13 @@ function selectSpotifyResult(result) {
   document.querySelector("#spotifyType").value = result.type;
   const name = document.querySelector("#nameInput");
   if (!name.value.trim()) name.value = result.name.slice(0, name.maxLength);
-  document.querySelector("#spotifySelectionMessage").textContent = `Selected: ${result.name}${result.subtitle ? ` - ${result.subtitle}` : ""}`;
-  spotifySearchDialog.close();
+  document.querySelector("#spotifySelectionMessage").textContent = `Added: ${result.name}${result.subtitle ? ` - ${result.subtitle}` : ""}`;
+  if (result.type === "track") {
+    document.querySelector("#spotifySearchStatus").textContent = `Added ${result.name}. ${spotifyQueue.length} track${spotifyQueue.length === 1 ? "" : "s"} in queue`;
+    const query = document.querySelector("#spotifySearchQuery");
+    query.focus();
+    query.select();
+  } else spotifySearchDialog.close();
 }
 
 function addSpotifyItem(item) {
@@ -1035,6 +1048,9 @@ document.querySelector("#searchInput").addEventListener("input", renderTags);
 document.querySelector("#captureButton").addEventListener("click", event => captureUid(document.querySelector("#uidInput"), event.currentTarget));
 document.querySelector("#captureForwardButton").addEventListener("click", event => captureUid(document.querySelector("#forwardUid"), event.currentTarget));
 document.querySelector("#captureRewindButton").addEventListener("click", event => captureUid(document.querySelector("#rewindUid"), event.currentTarget));
+document.querySelector("#captureVolumeUpButton").addEventListener("click", event => captureUid(document.querySelector("#volumeUpUid"), event.currentTarget));
+document.querySelector("#captureVolumeDownButton").addEventListener("click", event => captureUid(document.querySelector("#volumeDownUid"), event.currentTarget));
+document.querySelector("#captureShuffleButton").addEventListener("click", event => captureUid(document.querySelector("#shuffleUid"), event.currentTarget));
 document.querySelector("#saveControlsButton").addEventListener("click", saveControlTags);
 document.querySelector("#mediaUpload").addEventListener("change", uploadSelectedFiles);
 document.querySelector("#existingMediaButton").addEventListener("click", openMediaDialog);
