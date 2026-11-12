@@ -60,6 +60,33 @@
           "spotifyId": ""
         }
       ]
+    },
+    {
+      "uid": "AA-AA-AA-AA-AA-AA-AA",
+      "name": "Random Shit",
+      "songs": [
+        {
+          "name": "Sanctified with Dynamite",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "2ZUUturolW3VpzXWzPEy2X"
+        },
+        {
+          "name": "Verteidiger des Blödsinns",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "18dgCFKITVogAIDL80kNoH"
+        },
+        {
+          "name": "Pommesgabel",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "7GqSADuSLxMkdwcWc1bR0c"
+        }
+      ]
     }
   ],
   "shortTags": {

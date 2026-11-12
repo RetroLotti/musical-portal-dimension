@@ -408,19 +408,34 @@ namespace MusicDimension.misc
                     return null;
                 }
 
-                if (request.SpotifyType == null || string.IsNullOrWhiteSpace(request.SpotifyId))
+                var items = request.SpotifyItems ?? [new SpotifyTagItemRequest(request.Name, request.SpotifyType, request.SpotifyId)];
+                if (items.Count is < 1 or > 100)
                 {
-                    error = "Choose a Spotify type and enter its ID.";
+                    error = "Add between 1 and 100 Spotify tracks, or one album or playlist.";
                     return null;
                 }
 
-                songs.Add(new Song
+                if (items.Count > 1 && items.Any(item => item == null || item.SpotifyType != SpotifyTypes.Track))
                 {
-                    Name = request.Name.Trim(),
-                    Type = SourceTypes.Spotify,
-                    SpotifyType = request.SpotifyType,
-                    SpotifyId = request.SpotifyId.Trim()
-                });
+                    error = "Only individual Spotify tracks can be combined. Use an album or playlist on its own.";
+                    return null;
+                }
+
+                foreach (var item in items)
+                {
+                    if (item == null || item.SpotifyType == null || !Enum.IsDefined(item.SpotifyType.Value) || string.IsNullOrWhiteSpace(item.SpotifyId))
+                    {
+                        error = "Choose a valid Spotify type and enter an ID for every item.";
+                        return null;
+                    }
+                    songs.Add(new Song
+                    {
+                        Name = string.IsNullOrWhiteSpace(item.Name) ? request.Name.Trim() : item.Name.Trim(),
+                        Type = SourceTypes.Spotify,
+                        SpotifyType = item.SpotifyType,
+                        SpotifyId = item.SpotifyId.Trim()
+                    });
+                }
             }
             else
             {
@@ -528,7 +543,11 @@ namespace MusicDimension.misc
         private static partial Regex SafeFileStemRegex();
     }
 
-    public sealed record CreateTagRequest(string Uid, string Name, SourceTypes Type, List<string>? Paths, SpotifyTypes? SpotifyType, string? SpotifyId);
+    public sealed record CreateTagRequest(string Uid, string Name, SourceTypes Type, List<string>? Paths, SpotifyTypes? SpotifyType, string? SpotifyId,
+        List<SpotifyTagItemRequest>? SpotifyItems = null);
+
+    /// <summary>A Spotify item in a tag's saved playback order.</summary>
+    public sealed record SpotifyTagItemRequest(string? Name, SpotifyTypes? SpotifyType, string? SpotifyId);
     public sealed record TrackControlTagsRequest(string? ForwardUid, string? RewindUid);
     public sealed record MediaFileInfo(string Name, string Path, string Extension, long Size);
 }

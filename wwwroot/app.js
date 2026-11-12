@@ -16,6 +16,8 @@ let spotifySearchController;
 let library = { registeredTags: [] };
 let mediaFiles = [];
 let uploadQueue = [];
+let spotifyQueue = [];
+let queueDrag;
 let queueUid = null;
 let editingUid = null;
 let spotifyEnabled = false;
@@ -136,7 +138,8 @@ function updateSourceFields() {
   const isLocal = sourceSelect.value === "local";
   localFields.hidden = !isLocal;
   spotifyFields.hidden = isLocal;
-  document.querySelector("#spotifyId").required = !isLocal;
+  document.querySelector("#spotifyId").required = !isLocal && spotifyQueue.length === 0;
+  renderQueue();
 }
 
 function normalizedMediaPath(path) {
@@ -242,7 +245,12 @@ async function editTag(tag) {
   document.querySelector("#nameInput").value = tag.name ?? "";
   sourceSelect.value = source;
   document.querySelector("#spotifyType").value = songs[0]?.spotifyType ?? "track";
-  document.querySelector("#spotifyId").value = songs[0]?.spotifyId ?? "";
+  document.querySelector("#spotifyId").value = "";
+  spotifyQueue = source === "spotify" ? songs.map(song => ({
+    name: song.name || song.spotifyId,
+    spotifyType: song.spotifyType,
+    spotifyId: song.spotifyId
+  })) : [];
 
   if (source === "local") {
     uploadQueue = songs.filter(song => song.path).map(song => {
@@ -279,6 +287,7 @@ function cancelEdit() {
   editingUid = null;
   queueUid = null;
   uploadQueue = [];
+  spotifyQueue = [];
   document.querySelector("#tagForm").reset();
   document.querySelector("#uidInput").readOnly = false;
   document.querySelector("#editorTitle").textContent = "Register a tag";
@@ -304,20 +313,33 @@ function fileSize(size) {
 }
 
 function renderQueue() {
+  queueDrag?.cancel();
+  const queue = sourceSelect.value === "spotify" ? spotifyQueue : uploadQueue;
+  const isSpotify = sourceSelect.value === "spotify";
   trackQueueElement.replaceChildren();
-  queueCount.textContent = `${uploadQueue.length} track${uploadQueue.length === 1 ? "" : "s"}`;
+  queueCount.textContent = `${queue.length} ${isSpotify && queue.some(item => item.spotifyType !== "track") ? "item" : "track"}${queue.length === 1 ? "" : "s"}`;
+  document.querySelector("#queueMessage").textContent = "";
 
-  if (uploadQueue.length === 0) {
+  if (queue.length === 0) {
     const empty = document.createElement("li");
     empty.className = "queue-empty";
-    empty.textContent = "Add one or more files. Their order here is the playback order.";
+    empty.textContent = isSpotify ? "No Spotify items added" : "Add one or more files. Their order here is the playback order.";
     trackQueueElement.append(empty);
     return;
   }
 
-  for (const [index, file] of uploadQueue.entries()) {
+  for (const [index, file] of queue.entries()) {
     const item = document.createElement("li");
     item.className = "track-item";
+    item.dataset.index = String(index);
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "track-drag-handle";
+    handle.textContent = "⠿";
+    handle.title = `Drag to reorder ${file.name}`;
+    handle.setAttribute("aria-label", `Drag to reorder ${file.name}`);
+    handle.disabled = queue.length < 2;
+    enableQueueDrag(handle, item, index, queue);
 
     const position = document.createElement("span");
     position.className = "track-position";
@@ -330,22 +352,114 @@ function renderQueue() {
     title.textContent = file.name;
     const meta = document.createElement("p");
     meta.className = "track-meta";
-    meta.textContent = `${file.extension.replace(".", "").toUpperCase()} · ${fileSize(file.size)}`;
+    meta.textContent = isSpotify ? `Spotify ${file.spotifyType}${file.subtitle ? ` · ${file.subtitle}` : ""}`
+      : `${file.extension.replace(".", "").toUpperCase()} · ${fileSize(file.size)}`;
     copy.append(title, meta);
 
     const actions = document.createElement("div");
     actions.className = "track-actions";
     actions.append(
-      queueAction("↑", "Move up", index, -1, index === 0),
-      queueAction("↓", "Move down", index, 1, index === uploadQueue.length - 1),
-      queueAction("×", "Remove", index, 0, false, true)
+      queueAction("↑", "Move up", queue, index, -1, index === 0),
+      queueAction("↓", "Move down", queue, index, 1, index === queue.length - 1),
+      queueAction("×", "Remove", queue, index, 0, false, true)
     );
-    item.append(position, copy, actions);
+    item.append(handle, position, copy, actions);
     trackQueueElement.append(item);
   }
 }
 
-function queueAction(symbol, label, index, offset, disabled, remove = false) {
+function moveQueueItem(queue, from, to) {
+  if (from === to || to < 0 || to >= queue.length) return;
+  const [moved] = queue.splice(from, 1);
+  queue.splice(to, 0, moved);
+  renderQueue();
+  document.querySelector("#queueMessage").textContent = `${moved.name} moved to position ${to + 1}`;
+  trackQueueElement.querySelector(`[data-index="${to}"] .track-drag-handle`)?.focus({ preventScroll: true });
+}
+
+function enableQueueDrag(handle, item, index, queue) {
+  handle.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || queue.length < 2) return;
+    event.preventDefault();
+    queueDrag?.cancel();
+    handle.setPointerCapture(event.pointerId);
+    const pointerId = event.pointerId;
+    const startY = event.clientY;
+    let pointerX = event.clientX;
+    let pointerY = event.clientY;
+    let insertionIndex = null;
+    let moved = false;
+    let animation;
+    const clearMarkers = () => {
+      for (const row of trackQueueElement.children) row.classList.remove("drop-before", "drop-after");
+    };
+    const markTarget = () => {
+      clearMarkers();
+      insertionIndex = null;
+      const bounds = trackQueueElement.getBoundingClientRect();
+      if (!moved || pointerX < bounds.left || pointerX > bounds.right || pointerY < bounds.top || pointerY > bounds.bottom) return;
+      const rows = [...trackQueueElement.children];
+      const row = rows.find(candidate => {
+        const bounds = candidate.getBoundingClientRect();
+        return pointerY < bounds.top + bounds.height / 2;
+      });
+      insertionIndex = row ? Number(row.dataset.index) : queue.length;
+      (row ?? rows.at(-1))?.classList.add(row ? "drop-before" : "drop-after");
+    };
+    const frame = () => {
+      if (!queueDrag) return;
+      const bounds = trackQueueElement.getBoundingClientRect();
+      if (moved && pointerX >= bounds.left && pointerX <= bounds.right && pointerY >= bounds.top && pointerY <= bounds.bottom) {
+        if (pointerY < bounds.top + 30) trackQueueElement.scrollTop -= 6;
+        else if (pointerY > bounds.bottom - 30) trackQueueElement.scrollTop += 6;
+        markTarget();
+      }
+      animation = requestAnimationFrame(frame);
+    };
+    const move = next => {
+      if (next.pointerId !== pointerId) return;
+      pointerX = next.clientX;
+      pointerY = next.clientY;
+      moved ||= Math.abs(pointerY - startY) > 5;
+      markTarget();
+    };
+    const finish = commit => {
+      queueDrag = null;
+      cancelAnimationFrame(animation);
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", drop);
+      handle.removeEventListener("pointercancel", cancel);
+      handle.removeEventListener("lostpointercapture", cancel);
+      document.removeEventListener("keydown", escape);
+      if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+      clearMarkers();
+      item.classList.remove("is-dragging");
+      trackQueueElement.classList.remove("is-dragging");
+      if (commit && moved && insertionIndex !== null) {
+        const target = insertionIndex > index ? insertionIndex - 1 : insertionIndex;
+        moveQueueItem(queue, index, target);
+      }
+    };
+    const drop = next => {
+      if (next.pointerId !== pointerId) return;
+      move(next);
+      finish(true);
+    };
+    const cancel = () => finish(false);
+    const escape = next => { if (next.key === "Escape") finish(false); };
+    queueDrag = { cancel };
+    item.classList.add("is-dragging");
+    trackQueueElement.classList.add("is-dragging");
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", drop);
+    handle.addEventListener("pointercancel", cancel);
+    handle.addEventListener("lostpointercapture", cancel);
+    document.addEventListener("keydown", escape);
+    animation = requestAnimationFrame(frame);
+  });
+}
+
+function queueAction(symbol, label, queue, index, offset, disabled, remove = false) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = `track-action${remove ? " remove" : ""}`;
@@ -354,9 +468,11 @@ function queueAction(symbol, label, index, offset, disabled, remove = false) {
   button.setAttribute("aria-label", label);
   button.disabled = disabled;
   button.addEventListener("click", () => {
-    if (remove) uploadQueue.splice(index, 1);
-    else [uploadQueue[index], uploadQueue[index + offset]] = [uploadQueue[index + offset], uploadQueue[index]];
-    renderQueue();
+    if (remove) {
+      queue.splice(index, 1);
+      document.querySelector("#spotifyId").required = sourceSelect.value === "spotify" && spotifyQueue.length === 0;
+      renderQueue();
+    } else moveQueueItem(queue, index, index + offset);
   });
   return button;
 }
@@ -464,17 +580,24 @@ async function createTag(event) {
   formMessage.textContent = "";
   formMessage.classList.remove("error");
   const source = sourceSelect.value;
+  if (source === "spotify" && document.querySelector("#spotifyId").value.trim() && !addManualSpotifyItem()) return;
   const payload = {
     uid: document.querySelector("#uidInput").value,
     name: document.querySelector("#nameInput").value,
     type: source,
     paths: source === "local" ? uploadQueue.map(file => file.path) : [],
     spotifyType: source === "spotify" ? document.querySelector("#spotifyType").value : null,
-    spotifyId: source === "spotify" ? document.querySelector("#spotifyId").value : null
+    spotifyId: null,
+    spotifyItems: source === "spotify" ? spotifyQueue.map(item => ({ name: item.name, spotifyType: item.spotifyType, spotifyId: item.spotifyId })) : null
   };
 
   if (source === "local" && uploadQueue.length === 0) {
     formMessage.textContent = "Add at least one audio or playlist file.";
+    formMessage.classList.add("error");
+    return;
+  }
+  if (source === "spotify" && spotifyQueue.length === 0) {
+    formMessage.textContent = "Add at least one Spotify track, album, or playlist.";
     formMessage.classList.add("error");
     return;
   }
@@ -747,13 +870,42 @@ function openSpotifySearch() {
 }
 
 function selectSpotifyResult(result) {
+  if (!addSpotifyItem({ name: result.name, spotifyType: result.type, spotifyId: result.id, subtitle: result.subtitle })) return;
   document.querySelector("#spotifyType").value = result.type;
-  document.querySelector("#spotifyId").value = result.id;
   const name = document.querySelector("#nameInput");
   if (!name.value.trim()) name.value = result.name.slice(0, name.maxLength);
   document.querySelector("#spotifySelectionMessage").textContent = `Selected: ${result.name}${result.subtitle ? ` - ${result.subtitle}` : ""}`;
   spotifySearchDialog.close();
 }
+
+function addSpotifyItem(item) {
+  if (spotifyQueue.length && (item.spotifyType !== "track" || spotifyQueue.some(entry => entry.spotifyType !== "track"))) {
+    if (!window.confirm("Albums and playlists must be used on their own. Replace the current Spotify selection?")) return false;
+    spotifyQueue = [];
+  }
+  if (spotifyQueue.length >= 100) {
+    showToast("A tag can contain up to 100 Spotify tracks.");
+    return false;
+  }
+  spotifyQueue.push(item);
+  document.querySelector("#spotifyId").value = "";
+  document.querySelector("#spotifyId").required = false;
+  queueUid = normalizedUid(document.querySelector("#uidInput").value);
+  renderQueue();
+  document.querySelector("#queueMessage").textContent = `Added ${item.name}`;
+  return true;
+}
+
+function addManualSpotifyItem() {
+  const spotifyId = document.querySelector("#spotifyId").value.trim();
+  if (!spotifyId) {
+    showToast("Enter a Spotify ID first.");
+    return false;
+  }
+  return addSpotifyItem({ name: spotifyId, spotifyType: document.querySelector("#spotifyType").value, spotifyId });
+}
+
+document.querySelector("#addSpotifyItemButton").addEventListener("click", addManualSpotifyItem);
 
 function renderSpotifyResults(results) {
   spotifySearchResults.replaceChildren();
@@ -892,12 +1044,15 @@ document.querySelector("#closeMediaDialog").addEventListener("click", () => medi
 document.querySelector("#cancelEditButton").addEventListener("click", cancelEdit);
 document.querySelector("#uidInput").addEventListener("input", event => {
   const uid = normalizedUid(event.target.value);
-  if (uploadQueue.length && uid !== queueUid) {
+  if ((uploadQueue.length || spotifyQueue.length) && queueUid && uid !== queueUid) {
     uploadQueue = [];
+    spotifyQueue = [];
     queueUid = null;
-    renderQueue();
+    document.querySelector("#spotifySelectionMessage").textContent = "";
+    updateSourceFields();
     document.querySelector("#uploadStatus").textContent = "UID changed. Add files again for this tag.";
   }
+  if ((uploadQueue.length || spotifyQueue.length) && !queueUid) queueUid = uid;
 });
 document.querySelector("#tagForm").addEventListener("submit", createTag);
 document.querySelector("#refreshButton").addEventListener("click", () => refresh().catch(error => showToast(error.message)));

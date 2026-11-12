@@ -1,5 +1,19 @@
 @baseUrl = http://127.0.0.1:5080
 
+### Create a tag with an ordered Spotify track queue (replace example IDs)
+POST {{baseUrl}}/api/tags
+Content-Type: application/json
+
+{
+  "uid": "AA-BB-CC",
+  "name": "Spotify track queue",
+  "type": "spotify",
+  "spotifyItems": [
+    { "name": "First track", "spotifyType": "track", "spotifyId": "FIRST_TRACK_ID" },
+    { "name": "Second track", "spotifyType": "track", "spotifyId": "SECOND_TRACK_ID" }
+  ]
+}
+
 ### Managed Raspotify receiver status and last applied settings
 GET {{baseUrl}}/api/spotify/receiver
 

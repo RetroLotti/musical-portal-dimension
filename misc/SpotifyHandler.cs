@@ -313,23 +313,33 @@
             throw new InvalidOperationException($"Spotify device '{_config.SpotifyDeviceName}' is unavailable. Check that the Pi's Spotify Connect receiver is running and signed in; the Web API cannot start or authenticate the receiver. No other device was selected.");
         }
 
-        public async Task PlayAsync(string spotifyType, string spotifyId)
+        public Task PlayAsync(string spotifyType, string spotifyId)
         {
+            if (!Enum.TryParse<SpotifyTypes>(spotifyType, ignoreCase: true, out var type) || !Enum.IsDefined(type))
+                throw new ArgumentException("Choose a Spotify track, album, or playlist.", nameof(spotifyType));
+            return PlayAsync([new Song { Type = SourceTypes.Spotify, SpotifyType = type, SpotifyId = spotifyId }]);
+        }
+
+        public async Task PlayAsync(IReadOnlyList<Song> songs)
+        {
+            if (songs.Count is < 1 or > 100 || songs.Any(song => song == null || song.Type != SourceTypes.Spotify
+                || song.SpotifyType == null || !Enum.IsDefined(song.SpotifyType.Value) || string.IsNullOrWhiteSpace(song.SpotifyId)))
+                throw new ArgumentException("Choose between 1 and 100 valid Spotify tracks, or one album or playlist.", nameof(songs));
+            if (songs.Count > 1 && songs.Any(song => song.SpotifyType != SpotifyTypes.Track))
+                throw new ArgumentException("Spotify albums and playlists must be played on their own.", nameof(songs));
+
             await ExecuteAsync(async spotify =>
             {
                 var deviceId = await GetDeviceIdAsync(spotify, activate: true);
-                var uri = $"spotify:{spotifyType}:{spotifyId}";
                 var playbackRequest = new PlayerResumePlaybackRequest { DeviceId = deviceId };
-
-                switch (spotifyType)
+                var first = songs[0];
+                if (first.SpotifyType is SpotifyTypes.Album or SpotifyTypes.Playlist)
                 {
-                    case "album":
-                    case "playlist":
-                        playbackRequest.ContextUri = uri;
-                        break;
-                    default:
-                        playbackRequest.Uris = new List<string> { uri };
-                        break;
+                    playbackRequest.ContextUri = $"spotify:{first.SpotifyType.ToString()!.ToLowerInvariant()}:{first.SpotifyId!.Trim()}";
+                }
+                else
+                {
+                    playbackRequest.Uris = songs.Select(song => $"spotify:track:{song.SpotifyId!.Trim()}").ToList();
                 }
 
                 await spotify.Player.ResumePlayback(playbackRequest);

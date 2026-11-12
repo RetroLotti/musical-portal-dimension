@@ -12,7 +12,6 @@ Steps in order to get things started:
 - pair the receiver once in the Spotify phone/desktop app on the same LAN; receiver credentials are retained across reboots
 - connect Lego dimensions portal
 - start musical dimension
-- 
 
 ## Raspberry Pi 3 Model B
 
@@ -102,7 +101,11 @@ Keep `config/tokens.json` readable/writable by the `musicdimension` service user
 
 ### Search Spotify For A Tag
 
-In **Tags & music**, choose **Spotify** as the playback source, then **Search Spotify**. Search for tracks, albums, or playlists by title, artist, or playlist name. Results show artwork and artist/owner details, with links to open the items in Spotify. Selecting a result fills its type and ID; if the tag name is blank, it is filled from the result too. Save the tag as usual. Each tag selects one Spotify track, album, or playlist. Manual type/ID entry remains available.
+In **Tags & music**, choose **Spotify** as the playback source, then **Search Spotify**. Selecting a result adds it to the tag's playback queue; if the tag name is blank, it is filled from the result too. Repeat to add up to 100 individual Spotify tracks in your chosen order. For manual entry, choose the type, enter its ID, and click **Add Spotify item**. Save the tag to keep its ordered queue. Existing single-track tags remain editable.
+
+Both local and Spotify queues support drag-and-drop using the grip beside each track, with mouse or touch. Drop markers show the insertion point, and the list scrolls when dragging near its top or bottom. Escape cancels a drag. The up/down buttons remain available for keyboard reordering, and the remove button deletes an item from the tag's queue. Save changes to persist the order; Spotify receives the complete ordered track list when the tag is played.
+
+An album or playlist is still used as a single selection, not mixed with individual tracks or other contexts. Selecting one asks before replacing an existing queue. Manual type/ID entry and the Spotify links in search results remain available. Playback and search require the configured Spotify account and receiver as described below.
 
 Search requires enabled Spotify support and an existing OAuth login, but does not require the Pi's playback device to be active. It uses the configured Spotify account on the server and returns up to ten results per submitted search. Spotify developer-app/account restrictions can limit search, particularly playlist availability; when search is unavailable or rate limited, the dialog reports the error and manual ID entry still works. No Spotify credentials are sent to the browser.
 

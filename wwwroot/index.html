@@ -210,13 +210,6 @@
               <button id="existingMediaButton" class="upload-button" type="button">Browse existing</button>
               <span id="uploadStatus" class="field-note">Scan or enter the UID first. Audio and M3U files supported.</span>
             </div>
-            <div class="queue-area">
-              <div class="queue-heading">
-                <span>Playback order</span>
-                <span id="queueCount" class="queue-count">0 tracks</span>
-              </div>
-              <ol id="trackQueue" class="track-queue" aria-live="polite"></ol>
-            </div>
           </div>
 
           <div id="spotifyFields" class="source-fields" hidden>
@@ -233,9 +226,19 @@
               </div>
               <div class="field-group">
                 <label for="spotifyId">Spotify ID</label>
-                <input id="spotifyId" name="spotifyId" type="text" placeholder="Item ID">
+                <input id="spotifyId" name="spotifyId" type="text" placeholder="Item ID" autocomplete="off">
               </div>
             </div>
+            <button id="addSpotifyItemButton" class="button button-secondary" type="button">Add Spotify item</button>
+          </div>
+
+          <div class="queue-area">
+            <div class="queue-heading">
+              <span>Playback order</span>
+              <span id="queueCount" class="queue-count">0 tracks</span>
+            </div>
+            <ol id="trackQueue" class="track-queue" aria-label="Playback order"></ol>
+            <span id="queueMessage" class="form-message" role="status" aria-live="polite"></span>
           </div>
 
           <div class="form-footer">

@@ -225,8 +225,7 @@
                         break;
                     }
 
-                    // play first song in the list for now (or the album or playlist)
-                    await _spotifyHandler.PlayAsync(song.SpotifyType.ToString()!.ToLower(), song.SpotifyId!);
+                    await _spotifyHandler.PlayAsync(songs);
                     _portalHandler.IsTransferring = true;
                     _currentTagUid = uid;
                     _currentPlaybackSource = SourceTypes.Spotify;
