@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tarfile
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -94,6 +95,49 @@ class SoloistUpdateTests(unittest.TestCase):
         with patch.object(updater, "urlopen", side_effect=OSError("offline")):
             with self.assertRaises(RuntimeError):
                 updater.update()
+
+    def test_bookworm_loader_error_explains_missing_runtime(self):
+        result = subprocess.CompletedProcess([], 1, "", "soloist: /lib/aarch64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found (required by soloist)")
+        with patch.object(updater.subprocess, "run", return_value=result), patch.object(updater.platform, "libc_ver", return_value=("glibc", "2.36")):
+            self.assertIsNone(updater.installed_version(self.root / "soloist"))
+            with self.assertRaisesRegex(RuntimeError, r"GLIBC_2.38.*glibc 2.36.*do not replace glibc manually"):
+                updater.installed_version(self.root / "soloist", required=True)
+
+    def test_missing_library_error_names_the_library(self):
+        result = subprocess.CompletedProcess([], 127, "", "soloist: error while loading shared libraries: libpulse.so.0: cannot open shared object file")
+        with patch.object(updater.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(RuntimeError, "missing shared library libpulse.so.0"):
+                updater.installed_version(self.root / "soloist", required=True)
+
+    def test_failed_candidate_diagnostic_survives_update(self):
+        with patch.object(updater, "urlopen", return_value=Response(archive())), patch.object(updater, "installed_version", side_effect=RuntimeError("The downloaded Soloist cannot run on this OS: missing GLIBC_2.38")):
+            with self.assertRaisesRegex(RuntimeError, "missing GLIBC_2.38"):
+                updater.update()
+
+    def test_http_failure_is_distinguished_from_loader_failure(self):
+        with patch.object(updater, "urlopen", side_effect=HTTPError("url", 403, "Forbidden", {}, None)):
+            with self.assertRaisesRegex(RuntimeError, "HTTP 403"):
+                updater.update()
+
+    def test_installer_preflight_precedes_service_and_app_replacement(self):
+        installer = (Path(__file__).resolve().parents[1] / "install.sh").read_text()
+        preflight = installer.index('if ! /usr/bin/python3 -I "${PUBLISH_DIR}/deploy/raspberry-pi/update-soloist.py"')
+        self.assertLess(preflight, installer.index('systemctl stop "${SERVICE_NAME}"'))
+        self.assertLess(preflight, installer.index('systemctl disable --now "${old_receiver}"'))
+        self.assertLess(preflight, installer.index('rm -rf -- "${existing}"'))
+
+    def test_actionable_failure_is_saved_for_website(self):
+        message = "The downloaded Soloist cannot run on this OS: missing GLIBC_2.38"
+        with patch("sys.argv", ["update-soloist.py"]), patch.object(updater, "update", side_effect=RuntimeError(message)):
+            with self.assertRaisesRegex(RuntimeError, "GLIBC_2.38"):
+                updater.main()
+        self.assertEqual(json.loads((self.root / "update.json").read_text())["error"], message)
+
+    def test_failed_startup_check_still_allows_local_app(self):
+        message = "The downloaded Soloist cannot run on this OS: missing GLIBC_2.38"
+        with patch("sys.argv", ["update-soloist.py", "--startup"]), patch.object(updater, "update", side_effect=RuntimeError(message)):
+            updater.main()
+        self.assertEqual(json.loads((self.root / "update.json").read_text())["state"], "failed")
 
     def test_bad_candidate_does_not_replace_installed_binary(self):
         executable = self.root / "soloist"

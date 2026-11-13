@@ -179,6 +179,15 @@ for receiver_file in configure-receiver.py update-soloist.py run-soloist.py musi
     fi
 done
 
+echo "Checking the official Soloist build on this OS before changing installed services..."
+getconf GNU_LIBC_VERSION || true
+install -d -o root -g root -m 0755 /opt/musicdimension-soloist /var/lib/musicdimension-receiver
+if ! /usr/bin/python3 -I "${PUBLISH_DIR}/deploy/raspberry-pi/update-soloist.py"; then
+    echo "Soloist preflight failed. Existing application files and service enablement have not been changed." >&2
+    echo "Resolve the reported download/runtime problem before retrying. Do not manually replace the system glibc." >&2
+    exit 1
+fi
+
 mkdir -p "${INSTALL_DIR}/config" "${INSTALL_DIR}/media"
 chown root:root "${INSTALL_DIR}"
 chmod 0755 "${INSTALL_DIR}"
@@ -241,7 +250,6 @@ for unit in musicdimension-audio.service musicdimension-soloist.service musicdim
     install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/${unit}" "/etc/systemd/system/${unit}"
 done
 install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" -m 0700 /var/lib/musicdimension/soloist /var/cache/musicdimension/soloist
-/usr/bin/python3 -I /usr/local/lib/musicdimension/update-soloist.py
 
 udevadm control --reload-rules
 udevadm trigger --subsystem-match=usb

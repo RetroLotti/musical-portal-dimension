@@ -5,12 +5,13 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import platform
+import re
 import shutil
 import struct
 import subprocess
 import tarfile
 import tempfile
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -33,12 +34,46 @@ def atomic_json(path, value):
             os.unlink(temporary)
 
 
-def installed_version(executable):
+def installed_version(executable, required=False):
     try:
         result = subprocess.run([str(executable), "--version"], capture_output=True, text=True, timeout=15, check=False)
-        return result.stdout.strip()[:4096] if result.returncode == 0 else None
-    except (OSError, subprocess.SubprocessError):
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()[:4096]
+        if required:
+            output = result.stderr + "\n" + result.stdout
+            versions = sorted(set(re.findall(r"(?:GLIBC|GLIBCXX|CXXABI)_[0-9.]+", output)))
+            if versions and ("not found" in output or "not available" in output):
+                libc = " ".join(platform.libc_ver()).strip() or "unknown libc"
+                raise RuntimeError("The downloaded Soloist cannot run on this OS: missing " + ", ".join(versions)
+                                   + f" (detected {libc}). Use a supported newer Raspberry Pi OS; do not replace glibc manually.")
+            library = re.search(r"error while loading shared libraries:\s*([A-Za-z0-9_.+\-]+)", output)
+            if library:
+                raise RuntimeError("The downloaded Soloist cannot run: missing shared library " + library.group(1)
+                                   + ". Install its OS package or use a compatible Raspberry Pi OS.")
+            if result.returncode == 10:
+                raise RuntimeError("Spotify's downloaded Soloist build reports that it has expired (exit 10). Check the Pi clock and Spotify's downloads page.")
+            raise RuntimeError(f"The downloaded Soloist --version check failed (exit {result.returncode}). Check OS compatibility and Spotify's current build requirements.")
         return None
+    except (OSError, subprocess.SubprocessError) as error:
+        if required:
+            if isinstance(error, subprocess.TimeoutExpired):
+                raise RuntimeError("The downloaded Soloist --version check timed out.") from None
+            raise RuntimeError("The downloaded Soloist could not be executed. Check its architecture, dynamic loader, permissions, and OS compatibility.") from None
+        return None
+
+
+def failure_reason(error):
+    if isinstance(error, HTTPError):
+        return f"Spotify's Soloist download returned HTTP {error.code}. Check CDN access and the official downloads page."
+    if isinstance(error, URLError):
+        return "The Soloist download could not connect over HTTPS. Check DNS, TLS certificates, the Pi clock, proxy settings, and internet access."
+    if isinstance(error, (RuntimeError, ValueError)):
+        return str(error)
+    if isinstance(error, tarfile.TarError):
+        return "The Soloist archive is incomplete or invalid. Retry the official download."
+    if isinstance(error, OSError):
+        return "The Soloist update encountered an OS/filesystem error. Check free disk space, permissions, and download access."
+    return "The Soloist update failed unexpectedly. Check the updater service logs."
 
 
 def file_hash(path):
@@ -105,7 +140,7 @@ def update():
                 etag = response.headers.get("ETag")
             candidate = Path(temporary) / "soloist"
             extract_executable(archive, candidate, machine)
-            version = installed_version(candidate)
+            version = installed_version(candidate, required=True)
             if not version:
                 raise ValueError("Downloaded Soloist failed its version/startup check")
             digest = file_hash(candidate)
@@ -118,13 +153,13 @@ def update():
         if error.code == 304 and current_version:
             result = dict(state="current", version=current_version, error=None)
         elif current_version:
-            result = dict(state="offline", version=current_version, error="Update check failed; retaining the installed working build.")
+            result = dict(state="offline", version=current_version, error=failure_reason(error) + " Retaining the installed working build.")
         else:
-            raise RuntimeError("Soloist could not be downloaded and no working installed build is available") from None
-    except Exception:
+            raise RuntimeError(failure_reason(error) + " No working installed Soloist build is available.") from None
+    except Exception as error:
         if not current_version:
-            raise RuntimeError("Soloist update failed and no working installed build is available") from None
-        result = dict(state="offline", version=current_version, error="Update check failed; retaining the installed working build.")
+            raise RuntimeError(failure_reason(error) + " No working installed Soloist build is available.") from None
+        result = dict(state="offline", version=current_version, error=failure_reason(error) + " Retaining the installed working build.")
     atomic_json(STATUS, result)
     return result
 
@@ -140,8 +175,10 @@ def main():
         print("Soloist update check: " + result["state"])
         if arguments.startup and result["state"] == "updated":
             subprocess.run(["/usr/bin/systemctl", "try-restart", "musicdimension-soloist.service"], check=True, timeout=30)
-    except Exception:
-        atomic_json(STATUS, dict(state="failed", version=None, error="Soloist update failed. Check network access, OS compatibility, and the updater service logs."))
+    except Exception as error:
+        message = failure_reason(error)
+        atomic_json(STATUS, dict(state="failed", version=None, error=message))
+        print("Soloist update failed: " + message)
         if arguments.startup:
             print("Soloist is unavailable; local playback and web settings remain available.")
             return
