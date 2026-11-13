@@ -64,6 +64,42 @@ usermod -aG plugdev,audio "${SERVICE_USER}"
 
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
+ASSET_URL=""
+
+build_from_source() {
+    if [[ "${RUNTIME_ID}" != "linux-arm64" ]]; then
+        echo "The source-build fallback requires 64-bit Raspberry Pi OS. Use a current ARM release with Soloist support." >&2
+        return 1
+    fi
+
+    echo "Building a self-contained .NET 10 ARM64 publish from source."
+    curl --fail --location --retry 3 --silent --show-error https://dot.net/v1/dotnet-install.sh -o "${TEMP_DIR}/dotnet-install.sh"
+    bash "${TEMP_DIR}/dotnet-install.sh" --channel 10.0 --architecture arm64 --install-dir "${TEMP_DIR}/dotnet"
+
+    if [[ "${VERSION}" == "latest" ]]; then
+        SOURCE_URL="https://github.com/${REPOSITORY}/archive/refs/heads/main.tar.gz"
+    else
+        ENCODED_VERSION="$(python3 - "${VERSION}" <<'PY'
+import sys
+import urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+)"
+        SOURCE_URL="https://github.com/${REPOSITORY}/archive/refs/tags/${ENCODED_VERSION}.tar.gz"
+    fi
+
+    mkdir -p "${TEMP_DIR}/source"
+    curl --fail --location --retry 3 --silent --show-error "${SOURCE_URL}" -o "${TEMP_DIR}/source.tar.gz"
+    tar -xzf "${TEMP_DIR}/source.tar.gz" -C "${TEMP_DIR}/source" --no-same-owner
+    PROJECT_FILE="$(find "${TEMP_DIR}/source" -name MusicDimension.csproj -print -quit)"
+    if [[ -z "${PROJECT_FILE}" ]]; then
+        echo "The source archive does not contain MusicDimension.csproj." >&2
+        return 1
+    fi
+
+    "${TEMP_DIR}/dotnet/dotnet" publish "${PROJECT_FILE}" --framework net10.0 --runtime linux-arm64 --configuration Release --self-contained true --output "${TEMP_DIR}/publish"
+    PUBLISH_DIR="${TEMP_DIR}/publish"
+}
 
 if [[ -n "${MUSICDIMENSION_PUBLISH_DIR:-}" ]]; then
     PUBLISH_DIR="$(realpath "${MUSICDIMENSION_PUBLISH_DIR}")"
@@ -129,40 +165,7 @@ if [[ -n "${ASSET_URL}" ]]; then
     fi
     PUBLISH_DIR="$(dirname "${APP_HOST}")"
 else
-    if [[ "${RUNTIME_ID}" != "linux-arm64" ]]; then
-        echo "No ${RUNTIME_ID} release asset exists. The automatic source-build fallback requires 64-bit Raspberry Pi OS." >&2
-        echo "Use Raspberry Pi OS 64-bit or publish a linux-arm release first." >&2
-        exit 1
-    fi
-
-    echo "No ARM64 release asset exists; building a self-contained .NET 10 ARM64 publish on this Pi."
-    curl --fail --location --retry 3 --silent --show-error https://dot.net/v1/dotnet-install.sh -o "${TEMP_DIR}/dotnet-install.sh"
-    bash "${TEMP_DIR}/dotnet-install.sh" --channel 10.0 --architecture arm64 --install-dir "${TEMP_DIR}/dotnet"
-
-    if [[ "${VERSION}" == "latest" ]]; then
-        SOURCE_URL="https://github.com/${REPOSITORY}/archive/refs/heads/main.tar.gz"
-    else
-        ENCODED_VERSION="$(python3 - "${VERSION}" <<'PY'
-import sys
-import urllib.parse
-print(urllib.parse.quote(sys.argv[1], safe=""))
-PY
-)"
-        SOURCE_URL="https://github.com/${REPOSITORY}/archive/refs/tags/${ENCODED_VERSION}.tar.gz"
-    fi
-
-    mkdir -p "${TEMP_DIR}/source"
-    curl --fail --location --retry 3 --silent --show-error "${SOURCE_URL}" -o "${TEMP_DIR}/source.tar.gz"
-    tar -xzf "${TEMP_DIR}/source.tar.gz" -C "${TEMP_DIR}/source" --no-same-owner
-    PROJECT_FILE="$(find "${TEMP_DIR}/source" -name MusicDimension.csproj -print -quit)"
-    if [[ -z "${PROJECT_FILE}" ]]; then
-        echo "The source archive does not contain MusicDimension.csproj." >&2
-        exit 1
-    fi
-
-    SOURCE_DIR="$(dirname "${PROJECT_FILE}")"
-    "${TEMP_DIR}/dotnet/dotnet" publish "${PROJECT_FILE}" --framework net10.0 --runtime linux-arm64 --configuration Release --self-contained true --output "${TEMP_DIR}/publish"
-    PUBLISH_DIR="${TEMP_DIR}/publish"
+    build_from_source
 fi
 fi
 
@@ -174,7 +177,19 @@ if [[ ! -f "${SERVICE_FILE}" || ! -f "${UDEV_FILE}" ]]; then
 fi
 for receiver_file in configure-receiver.py update-soloist.py run-soloist.py musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
     if [[ ! -f "${PUBLISH_DIR}/deploy/raspberry-pi/${receiver_file}" ]]; then
-        echo "Release lacks receiver integration (${receiver_file}). Use a release containing the new installer support." >&2
+        if [[ -n "${ASSET_URL}" && "${VERSION}" == "latest" ]]; then
+            echo "The latest GitHub release is missing Soloist support (${receiver_file}); building current source instead."
+            build_from_source
+            break
+        fi
+        echo "Selected install source lacks Soloist integration (${receiver_file}). Use the latest source installer or a compatible release." >&2
+        exit 1
+    fi
+done
+
+for receiver_file in configure-receiver.py update-soloist.py run-soloist.py musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
+    if [[ ! -f "${PUBLISH_DIR}/deploy/raspberry-pi/${receiver_file}" ]]; then
+        echo "Selected source is still missing required Soloist file ${receiver_file}. No existing application or receiver services were stopped." >&2
         exit 1
     fi
 done

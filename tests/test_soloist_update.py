@@ -126,6 +126,16 @@ class SoloistUpdateTests(unittest.TestCase):
         self.assertLess(preflight, installer.index('systemctl disable --now "${old_receiver}"'))
         self.assertLess(preflight, installer.index('rm -rf -- "${existing}"'))
 
+    def test_latest_release_missing_soloist_support_falls_back_to_main(self):
+        installer = (Path(__file__).resolve().parents[1] / "install.sh").read_text()
+        missing = installer.index('if [[ ! -f "${PUBLISH_DIR}/deploy/raspberry-pi/${receiver_file}" ]]')
+        self.assertIn('"${VERSION}" == "latest"', installer[missing:])
+        self.assertIn('build_from_source', installer[missing:])
+        self.assertIn('"https://github.com/${REPOSITORY}/archive/refs/heads/main.tar.gz"', installer)
+        source_builder = installer[installer.index("build_from_source() {"):missing]
+        self.assertIn('if [[ "${VERSION}" == "latest" ]]', source_builder)
+        self.assertIn('refs/tags/${ENCODED_VERSION}.tar.gz', source_builder)
+
     def test_actionable_failure_is_saved_for_website(self):
         message = "The downloaded Soloist cannot run on this OS: missing GLIBC_2.38"
         with patch("sys.argv", ["update-soloist.py"]), patch.object(updater, "update", side_effect=RuntimeError(message)):
