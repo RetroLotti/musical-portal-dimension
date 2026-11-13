@@ -11,5 +11,5 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
-ReadWritePaths=/etc/raspotify /etc/systemd/system /var/lib/musicdimension-receiver
-TimeoutStartSec=90
+ReadWritePaths=/etc/musicdimension-soloist /etc/systemd/system /var/lib/musicdimension-receiver
+TimeoutStartSec=300

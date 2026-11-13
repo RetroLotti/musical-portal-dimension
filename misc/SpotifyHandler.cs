@@ -12,6 +12,15 @@
         private Config _config = config;
         private readonly SemaphoreSlim _operationLock = new(1, 1);
         public Config Configuration => _config;
+        private string SoloistKeyFile => Path.Combine(Path.GetDirectoryName(_config.TokenFileName)!, "soloist-key.json");
+        public bool HasSoloistApiKey
+        {
+            get
+            {
+                try { return File.Exists(SoloistKeyFile) && !string.IsNullOrEmpty(JsonConvert.DeserializeObject<string>(File.ReadAllText(SoloistKeyFile))); }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException) { return false; }
+            }
+        }
 
         private const string SpotifyTokenUrl = "https://accounts.spotify.com/api/token";
         private const string RedirectUri = "http://127.0.0.1:8888/callback";
@@ -65,6 +74,11 @@
                     }
                 }
                 await SaveJsonAsync(fileName, configuration);
+                if (configuration.Receiver.SoloistApiKey != null)
+                {
+                    await SaveJsonAsync(SoloistKeyFile, configuration.Receiver.SoloistApiKey);
+                    configuration.Receiver.SoloistApiKey = null;
+                }
                 if (_config.ClientId != configuration.ClientId)
                 {
                     _pendingAuthorization = null;

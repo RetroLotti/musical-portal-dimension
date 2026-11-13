@@ -21,11 +21,14 @@ class ReceiverConfigurationTests(unittest.TestCase):
         root = Path(self.directory.name)
         self.config = root / "config.json"
         self.environment = root / "receiver.env"
+        self.audio = root / "pulse.pa"
+        self.key = root / "soloist-key.json"
+        self.key.write_text(json.dumps("fixture-private-key"))
         self.status = root / "status.json"
         self.settings = {"spotifyDeviceName": 'Music Dimension "Living Room"',
                          "receiver": {"enabled": True, "audioDevice": "plughw:CARD=Headphones,DEV=0", "bitrate": 160}}
         self.save()
-        for name, value in (("CONFIG", self.config), ("ENVIRONMENT", self.environment), ("STATUS", self.status)):
+        for name, value in (("CONFIG", self.config), ("KEY", self.key), ("ENVIRONMENT", self.environment), ("AUDIO", self.audio), ("STATUS", self.status), ("UPDATE", root / "update.json")):
             patcher = patch.object(receiver, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -38,6 +41,9 @@ class ReceiverConfigurationTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.commands = []
+        patcher = patch.object(receiver, "set_runtime_owner")
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
         def fake_systemctl(*arguments, **options):
             self.commands.append(arguments)
@@ -53,15 +59,16 @@ class ReceiverConfigurationTests(unittest.TestCase):
     def test_apply_and_unchanged_poll_never_restarts(self):
         applied = receiver.apply_settings()
         content = self.environment.read_text(encoding="utf-8")
-        self.assertIn('LIBRESPOT_NAME="Music Dimension \\"Living Room\\""', content)
-        self.assertIn("LIBRESPOT_SYSTEM_CACHE=/var/lib/raspotify", content)
-        self.assertNotIn("DISABLE_CREDENTIAL_CACHE", content)
-        self.assertIn(("restart", "raspotify.service"), self.commands)
+        self.assertEqual(json.loads(content)["name"], self.settings["spotifyDeviceName"])
+        self.assertEqual(json.loads(content)["apiKey"], "fixture-private-key")
+        self.assertIn("module-alsa-sink device=plughw:CARD=Headphones,DEV=0", self.audio.read_text())
+        self.assertIn(("restart", "musicdimension-soloist.service"), self.commands)
         self.assertEqual(applied["name"], self.settings["spotifyDeviceName"])
         self.commands.clear()
         receiver.apply_settings()
-        self.assertNotIn(("restart", "raspotify.service"), self.commands)
-        self.assertIn(("start", "raspotify.service"), self.commands)
+        self.assertNotIn(("restart", "musicdimension-soloist.service"), self.commands)
+        self.assertNotIn(("restart", "musicdimension-audio.service"), self.commands)
+        self.assertIn(("start", "musicdimension-soloist.service"), self.commands)
 
     def test_name_or_audio_change_restarts_only_receiver(self):
         receiver.apply_settings()
@@ -69,14 +76,15 @@ class ReceiverConfigurationTests(unittest.TestCase):
         self.settings["receiver"]["audioDevice"] = "plughw:CARD=vc4hdmi,DEV=0"
         self.save()
         receiver.apply_settings()
-        self.assertIn(("restart", "raspotify.service"), self.commands)
+        self.assertIn(("restart", "musicdimension-soloist.service"), self.commands)
+        self.assertIn(("restart", "musicdimension-audio.service"), self.commands)
         self.assertTrue(all("musicdimension.service" not in command for command in self.commands))
 
     def test_disable_stops_receiver(self):
         self.settings["receiver"]["enabled"] = False
         self.save()
         receiver.apply_settings()
-        self.assertIn(("disable", "--now", "raspotify.service"), self.commands)
+        self.assertIn(("disable", "--now", "musicdimension-soloist.service", "musicdimension-audio.service"), self.commands)
         self.assertFalse(any(command[0] in ("start", "restart", "enable") for command in self.commands))
 
     def test_rejects_injected_or_invalid_values_before_writes(self):
@@ -107,6 +115,7 @@ class ReceiverConfigurationTests(unittest.TestCase):
         receiver.main()
         content = self.status.read_text(encoding="utf-8")
         self.assertNotIn("private-secret", content)
+        self.assertNotIn("fixture-private-key", content)
         self.assertTrue(json.loads(content)["managed"])
 
     def test_restart_failure_reports_safe_error(self):
@@ -130,10 +139,27 @@ class ReceiverConfigurationTests(unittest.TestCase):
         with self.assertRaises(OSError):
             receiver.read_settings()
 
-    def test_dropin_enables_credentials_and_discovery(self):
-        content = (ROOT / "deploy/raspberry-pi/raspotify-musicdimension.conf").read_text()
-        self.assertIn("UnsetEnvironment=LIBRESPOT_DISABLE_CREDENTIAL_CACHE LIBRESPOT_DISABLE_DISCOVERY", content)
-        self.assertIn("EnvironmentFile=/etc/raspotify/musicdimension.env", content)
+    def test_missing_api_key_keeps_web_setup_possible(self):
+        self.key.unlink()
+        self.save()
+        status = receiver.apply_settings()
+        self.assertFalse(status["apiKeyConfigured"])
+        self.assertIn("Save your Spotify Soloist API key", status["error"])
+        self.assertFalse(any(command[0] in ("enable", "start", "restart") for command in self.commands))
+
+    def test_startup_checks_and_private_local_api(self):
+        unit = (ROOT / "deploy/raspberry-pi/musicdimension.service").read_text()
+        self.assertIn("update-soloist.py --startup", unit)
+        launcher = (ROOT / "deploy/raspberry-pi/run-soloist.py").read_text()
+        self.assertIn('"127.0.0.1:9876"', launcher)
+        self.assertIn('"/var/lib/musicdimension/soloist"', launcher)
+        self.assertIn('"/var/cache/musicdimension/soloist"', launcher)
+
+    def test_invalid_key_rejected(self):
+        for key in ("private\nkey", "x" * 4097, {"unexpected": "object"}):
+            self.key.write_text(json.dumps(key))
+            with self.assertRaises(ValueError):
+                receiver.apply_settings()
 
 
 if __name__ == "__main__":
