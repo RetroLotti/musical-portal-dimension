@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch Music Dimension receiver settings
+
+[Path]
+PathChanged=/opt/musicdimension/config/config.json
+PathChanged=/opt/musicdimension/config/soloist-key.json
+Unit=musicdimension-receiver.service
+
+[Install]
+WantedBy=multi-user.target

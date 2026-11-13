@@ -1,0 +1,66 @@
+@baseUrl = http://127.0.0.1:5080
+
+### Configure unique playback control tags (blank fields clear assignments)
+PUT {{baseUrl}}/api/control-tags
+Content-Type: application/json
+
+{
+  "forwardUid": "10-11",
+  "rewindUid": "20-21",
+  "volumeUpUid": "30-31",
+  "volumeDownUid": "40-41",
+  "shuffleUid": "50-51"
+}
+
+### Create a tag with an ordered Spotify track queue (replace example IDs)
+POST {{baseUrl}}/api/tags
+Content-Type: application/json
+
+{
+  "uid": "AA-BB-CC",
+  "name": "Spotify track queue",
+  "type": "spotify",
+  "spotifyItems": [
+    { "name": "First track", "spotifyType": "track", "spotifyId": "FIRST_TRACK_ID" },
+    { "name": "Second track", "spotifyType": "track", "spotifyId": "SECOND_TRACK_ID" }
+  ]
+}
+
+### Managed Soloist receiver login, version/update status, and applied settings
+GET {{baseUrl}}/api/spotify/receiver
+
+### Update Spotify and receiver settings (use your client ID)
+PUT {{baseUrl}}/api/settings/spotify
+Content-Type: application/json
+
+{
+  "enable": false,
+  "clientId": "YOUR_CLIENT_ID",
+  "spotifyDeviceName": "Music Dimension",
+  "clientSecret": null,
+  "receiver": {
+    "enabled": true,
+    "audioDevice": "plughw:CARD=Headphones,DEV=0",
+    "soloistApiKey": null
+  }
+}
+
+### Read exact Spotify device names without changing playback
+GET {{baseUrl}}/api/spotify/devices
+
+### Authorization status (never returns tokens)
+GET {{baseUrl}}/api/spotify/auth
+
+### Start a ten-minute PKCE login; retain the returned session cookie
+POST {{baseUrl}}/api/spotify/auth/start
+
+### Complete in the same browser/session using the callback URL from Spotify
+POST {{baseUrl}}/api/spotify/auth/complete
+Content-Type: application/json
+
+{
+  "callbackUrl": "http://127.0.0.1:8888/callback?code=REPLACE_WITH_CODE&state=REPLACE_WITH_STATE"
+}
+
+### Renew access using the saved refresh token
+POST {{baseUrl}}/api/spotify/auth/refresh

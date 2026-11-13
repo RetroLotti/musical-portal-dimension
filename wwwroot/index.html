@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#183b34">
+  <title>Music Dimension | Tag library</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Music Dimension home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>Music <b>Dimension</b></span>
+    </a>
+    <div class="topbar-status">
+      <span id="readerIndicator" class="status-dot"></span>
+      <span id="readerStatus">Checking reader</span>
+      <span class="status-divider"></span>
+      <span id="spotifyStatus">Checking Spotify</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-heading">
+      <div>
+        <p class="eyebrow">PORTAL CONTROL / LIBRARY</p>
+        <h1>Music manager</h1>
+      </div>
+      <button id="refreshButton" class="icon-button" type="button" title="Refresh library" aria-label="Refresh library">
+        <span aria-hidden="true">↻</span>
+      </button>
+    </section>
+
+    <div class="section-tabs" role="tablist" aria-label="Music manager sections">
+      <button id="libraryTab" class="section-tab" type="button" role="tab" aria-selected="true" aria-controls="libraryPanel">Tags &amp; music</button>
+      <button id="controlsTab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="controlsPanel" tabindex="-1">Playback controls</button>
+      <button id="spotifyTab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="spotifyPanel" tabindex="-1">Spotify settings</button>
+    </div>
+
+    <section id="controlsPanel" class="control-section tab-panel" role="tabpanel" aria-labelledby="controlsTab" tabindex="0" hidden>
+      <div class="control-heading">
+        <p class="eyebrow">PLAYBACK CONTROLS</p>
+        <h2 id="controlHeading">Playback control tags</h2>
+      </div>
+      <div class="control-fields">
+        <div class="field-group">
+          <label for="forwardUid">Forward to next track</label>
+          <div class="control-uid-row">
+            <input id="forwardUid" type="text" placeholder="Scan or enter tag UID" autocomplete="off">
+            <button id="captureForwardButton" class="button button-secondary" type="button">Scan</button>
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="rewindUid">Rewind to previous track</label>
+          <div class="control-uid-row">
+            <input id="rewindUid" type="text" placeholder="Scan or enter tag UID" autocomplete="off">
+            <button id="captureRewindButton" class="button button-secondary" type="button">Scan</button>
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="volumeUpUid">Volume up</label>
+          <div class="control-uid-row">
+            <input id="volumeUpUid" type="text" placeholder="Scan or enter tag UID" autocomplete="off">
+            <button id="captureVolumeUpButton" class="button button-secondary" type="button">Scan</button>
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="volumeDownUid">Volume down</label>
+          <div class="control-uid-row">
+            <input id="volumeDownUid" type="text" placeholder="Scan or enter tag UID" autocomplete="off">
+            <button id="captureVolumeDownButton" class="button button-secondary" type="button">Scan</button>
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="shuffleUid">Toggle shuffle</label>
+          <div class="control-uid-row">
+            <input id="shuffleUid" type="text" placeholder="Scan or enter tag UID" autocomplete="off">
+            <button id="captureShuffleButton" class="button button-secondary" type="button">Scan</button>
+          </div>
+        </div>
+      </div>
+      <div class="control-footer">
+        <span id="controlMessage" class="form-message" role="status" aria-live="polite"></span>
+        <button id="saveControlsButton" class="button button-primary" type="button">Save controls</button>
+      </div>
+      <form id="mediaSettingsForm" class="media-settings-form">
+        <div class="control-heading">
+          <p class="eyebrow">MEDIA LIBRARY</p>
+          <h2>Upload limit</h2>
+        </div>
+        <div class="media-limit-row">
+          <div class="field-group">
+            <label for="mediaMaxFileSizeMb">Maximum size per file (MiB)</label>
+            <input id="mediaMaxFileSizeMb" type="number" min="1" max="4096" step="1" required>
+          </div>
+          <p class="field-note">Allowed range: 1 to 4096 MiB. Applies to each uploaded file.</p>
+          <button id="saveMediaSettingsButton" class="button button-secondary" type="submit">Save upload limit</button>
+        </div>
+        <span id="mediaSettingsMessage" class="form-message" role="status" aria-live="polite"></span>
+      </form>
+    </section>
+
+    <section id="spotifyPanel" class="spotify-settings tab-panel" role="tabpanel" aria-labelledby="spotifyTab" tabindex="0" hidden>
+      <div class="control-heading">
+        <p class="eyebrow">SPOTIFY CONNECT</p>
+        <h2 id="spotifySettingsHeading">Spotify settings</h2>
+      </div>
+      <form id="spotifySettingsForm">
+        <label class="spotify-toggle" for="spotifyEnable">
+          <input id="spotifyEnable" type="checkbox">
+          Enable Spotify
+        </label>
+        <div class="control-fields">
+          <div class="field-group">
+            <label for="spotifyDeviceName">Device name</label>
+            <div class="spotify-device-name-row">
+              <input id="spotifyDeviceName" type="text" autocomplete="off">
+              <button id="loadSpotifyDevicesButton" class="icon-button" type="button" title="Find Spotify devices" aria-label="Find Spotify devices">↻</button>
+            </div>
+            <label id="spotifyDevicesLabel" for="spotifyAvailableDevices" hidden>Available Spotify devices</label>
+            <select id="spotifyAvailableDevices" hidden disabled></select>
+            <span id="spotifyDevicesMessage" class="form-message" role="status" aria-live="polite"></span>
+          </div>
+          <div class="field-group">
+            <label for="spotifyClientId">Client ID</label>
+            <input id="spotifyClientId" type="text" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field-group">
+            <label for="spotifyClientSecret">Client secret (optional for PKCE)</label>
+            <input id="spotifyClientSecret" type="password" autocomplete="new-password" spellcheck="false">
+          </div>
+          <label class="spotify-toggle" for="spotifyClearSecret">
+            <input id="spotifyClearSecret" type="checkbox">
+            Clear saved client secret
+          </label>
+        </div>
+        <fieldset id="receiverSettings" class="receiver-settings" disabled>
+          <legend>Pi Spotify Connect receiver</legend>
+          <label class="spotify-toggle" for="receiverEnabled">
+            <input id="receiverEnabled" type="checkbox">
+            Enable Spotify Soloist receiver
+          </label>
+          <div class="control-fields">
+            <div class="field-group">
+              <label for="receiverAudioDevice">ALSA output (via private PulseAudio)</label>
+              <input id="receiverAudioDevice" type="text" maxlength="128" placeholder="plughw:CARD=Headphones,DEV=0" autocomplete="off">
+            </div>
+            <div class="field-group">
+              <label for="soloistApiKey">Spotify Soloist API key</label>
+              <input id="soloistApiKey" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false">
+            </div>
+          </div>
+          <label class="spotify-toggle" for="clearSoloistApiKey">
+            <input id="clearSoloistApiKey" type="checkbox">
+            Clear saved Soloist API key
+          </label>
+          <a class="spotify-result-link" href="https://developer.spotify.com/dashboard/soloist" target="_blank" rel="noopener noreferrer">Spotify Soloist API key dashboard ↗</a>
+        </fieldset>
+        <div class="receiver-status-row">
+          <span id="receiverStatus" class="form-message" role="status" aria-live="polite">Checking Soloist receiver</span>
+          <button id="refreshReceiverStatus" class="icon-button" type="button" title="Refresh receiver status" aria-label="Refresh receiver status">↻</button>
+        </div>
+        <div class="control-footer">
+          <span id="spotifySettingsMessage" class="form-message" role="status" aria-live="polite"></span>
+          <button id="saveSpotifyButton" class="button button-primary" type="submit">Save Spotify settings</button>
+        </div>
+      </form>
+      <div class="spotify-authorization" aria-labelledby="spotifyAuthorizationHeading">
+        <div class="spotify-auth-header">
+          <div>
+            <h3 id="spotifyAuthorizationHeading">Account authorization</h3>
+            <p id="spotifyAuthorizationStatus" class="form-message" role="status" aria-live="polite">Checking authorization</p>
+          </div>
+          <div class="spotify-auth-actions">
+            <button id="connectSpotifyButton" class="button button-secondary" type="button">Connect Spotify</button>
+            <button id="refreshSpotifyTokenButton" class="button button-secondary" type="button" disabled>Refresh access</button>
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="spotifyRedirectUri">Spotify app redirect URI</label>
+          <input id="spotifyRedirectUri" type="text" value="http://127.0.0.1:8888/callback" readonly>
+        </div>
+        <form id="spotifyCallbackForm" hidden>
+          <a id="spotifyAuthorizationLink" class="button button-primary" target="_blank" rel="noopener noreferrer">Authorize with Spotify</a>
+          <div class="field-group">
+            <label for="spotifyCallbackUrl">Returned callback URL</label>
+            <input id="spotifyCallbackUrl" type="url" placeholder="http://127.0.0.1:8888/callback?code=...&amp;state=..." autocomplete="off" spellcheck="false" maxlength="16384" required>
+          </div>
+          <button id="completeSpotifyButton" class="button button-primary" type="submit">Complete connection</button>
+        </form>
+        <p id="spotifyAuthorizationMessage" class="form-message" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="libraryPanel" class="workspace tab-panel" role="tabpanel" aria-labelledby="libraryTab" tabindex="0">
+      <section class="library-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">COLLECTION</p>
+            <h2>Registered tags <span id="tagCount" class="count">0</span></h2>
+          </div>
+        </div>
+        <label class="search-box">
+          <span aria-hidden="true">⌕</span>
+          <input id="searchInput" type="search" placeholder="Find a tag or UID" autocomplete="off">
+        </label>
+        <div id="tagList" class="tag-list" aria-live="polite"></div>
+      </section>
+
+      <section class="editor-section">
+        <div class="section-heading editor-heading">
+          <div>
+            <p class="eyebrow">NEW ENTRY</p>
+            <h2 id="editorTitle">Register a tag</h2>
+          </div>
+          <span class="step-number">01</span>
+        </div>
+
+        <form id="tagForm">
+          <div class="field-group">
+            <label for="uidInput">Tag UID</label>
+            <div class="uid-control">
+              <input id="uidInput" name="uid" type="text" placeholder="04-00-00-00-00-00-00" autocomplete="off" required>
+              <button id="captureButton" class="button button-secondary" type="button">Scan tag</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="nameInput">Tag name</label>
+            <input id="nameInput" name="name" type="text" placeholder="e.g. Peter Venkman" maxlength="100" required>
+          </div>
+
+          <div class="field-group">
+            <label for="sourceSelect">Playback source</label>
+            <select id="sourceSelect" name="type">
+              <option value="local">Local media</option>
+              <option value="spotify">Spotify</option>
+            </select>
+          </div>
+
+          <div id="localFields" class="source-fields">
+            <div class="upload-row">
+              <label class="upload-button" for="mediaUpload">＋ Add media files</label>
+              <input id="mediaUpload" class="visually-hidden" type="file" accept="audio/*,.m3u,.m3u8" multiple>
+              <button id="existingMediaButton" class="upload-button" type="button">Browse existing</button>
+              <span id="uploadStatus" class="field-note">Scan or enter the UID first. Audio and M3U files supported.</span>
+            </div>
+          </div>
+
+          <div id="spotifyFields" class="source-fields" hidden>
+            <button id="openSpotifySearch" class="button button-secondary" type="button">Search Spotify</button>
+            <span id="spotifySelectionMessage" class="form-message" role="status" aria-live="polite"></span>
+            <div class="field-row">
+              <div class="field-group">
+                <label for="spotifyType">Spotify item</label>
+                <select id="spotifyType" name="spotifyType">
+                  <option value="track">Track</option>
+                  <option value="album">Album</option>
+                  <option value="playlist">Playlist</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label for="spotifyId">Spotify ID</label>
+                <input id="spotifyId" name="spotifyId" type="text" placeholder="Item ID" autocomplete="off">
+              </div>
+            </div>
+            <button id="addSpotifyItemButton" class="button button-secondary" type="button">Add Spotify item</button>
+          </div>
+
+          <div class="queue-area">
+            <div class="queue-heading">
+              <span>Playback order</span>
+              <span id="queueCount" class="queue-count">0 tracks</span>
+            </div>
+            <ol id="trackQueue" class="track-queue" aria-label="Playback order"></ol>
+            <span id="queueMessage" class="form-message" role="status" aria-live="polite"></span>
+          </div>
+
+          <div class="form-footer">
+            <span id="formMessage" class="form-message" role="status" aria-live="polite"></span>
+            <div class="form-actions">
+              <button id="cancelEditButton" class="button button-secondary" type="button" hidden>Cancel</button>
+              <button id="saveButton" class="button button-primary" type="submit"><span id="saveLabel">Add tag</span> <span aria-hidden="true">↗</span></button>
+            </div>
+          </div>
+        </form>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="mediaDialog" class="media-dialog" aria-labelledby="mediaDialogTitle">
+    <div class="dialog-header">
+      <div>
+        <p class="eyebrow">MEDIA LIBRARY</p>
+        <h2 id="mediaDialogTitle">Add existing files</h2>
+      </div>
+      <button id="closeMediaDialog" class="icon-button" type="button" title="Close dialog" aria-label="Close dialog">×</button>
+    </div>
+    <label class="search-box dialog-search">
+      <span aria-hidden="true">⌕</span>
+      <input id="mediaSearch" type="search" placeholder="Filter by file or folder" autocomplete="off">
+    </label>
+    <div id="availableMediaList" class="available-media-list" aria-live="polite"></div>
+    <div class="dialog-footer">
+      <span id="selectedMediaCount" class="field-note">0 selected</span>
+      <button id="addSelectedMedia" class="button button-primary" type="button">Add selected</button>
+    </div>
+  </dialog>
+
+  <dialog id="spotifySearchDialog" class="media-dialog" aria-labelledby="spotifySearchTitle">
+    <div class="dialog-header">
+      <h2 id="spotifySearchTitle">Search Spotify</h2>
+      <button id="closeSpotifySearch" class="icon-button" type="button" title="Close search" aria-label="Close Spotify search">×</button>
+    </div>
+    <form id="spotifySearchForm">
+      <div class="spotify-search-controls">
+        <div class="field-group">
+          <label for="spotifySearchType">Search for</label>
+          <select id="spotifySearchType">
+            <option value="track">Tracks</option>
+            <option value="album">Albums</option>
+            <option value="playlist">Playlists</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="spotifySearchQuery">Title, artist, or playlist</label>
+          <input id="spotifySearchQuery" type="search" maxlength="200" autocomplete="off" required>
+        </div>
+        <button id="spotifySearchButton" class="button button-primary" type="submit">Search</button>
+      </div>
+    </form>
+    <p id="spotifySearchStatus" class="form-message spotify-search-status" role="status" aria-live="polite"></p>
+    <div id="spotifySearchResults" class="spotify-search-results" aria-busy="false"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

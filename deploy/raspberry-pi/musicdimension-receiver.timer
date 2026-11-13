@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh Music Dimension receiver status
+
+[Timer]
+OnBootSec=15
+OnUnitInactiveSec=30
+Unit=musicdimension-receiver.service
+
+[Install]
+WantedBy=timers.target

@@ -4,11 +4,14 @@
 
     public class LastKnownTokens
     {
+        [JsonProperty("clientId")]
+        public string? ClientId { get; set; }
+
         [JsonProperty("accessToken")]
-        public string AccessToken { get; set; }
+        public string AccessToken { get; set; } = string.Empty;
 
         [JsonProperty("refreshToken")]
-        public string RefreshToken { get; set; }
+        public string RefreshToken { get; set; } = string.Empty;
 
         [JsonProperty("expiresIn")]
         public int ExpiresIn { get; set; }

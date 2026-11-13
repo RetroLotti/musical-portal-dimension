@@ -7,45 +7,29 @@ jobs:
     name: Release
     strategy:
       matrix:
-        kind: ['linux', 'linux-arm', 'windows', 'macOS']
+        kind: ['linux', 'linux-arm', 'windows']
         include:
           # Linux 64-bit
           - kind: linux
             os: ubuntu-latest
             target: linux-x64
-          # Linux 32-bit
-          - kind: linux
-            os: ubuntu-latest
-            target: linux-x86
           # Linux ARM 64-bit
           - kind: linux-arm
             os: ubuntu-latest
             target: linux-arm64
-          # Linux ARM 32-bit
-          - kind: linux-arm
-            os: ubuntu-latest
-            target: linux-arm
           # Windows 64-bit
           - kind: windows
             os: windows-latest
             target: win-x64
-          # Windows 32-bit
-          - kind: windows
-            os: windows-latest
-            target: win-x86
-          # macOS 64-bit
-          - kind: macOS
-            os: macos-latest
-            target: osx-x64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup dotnet
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 8.x
+          dotnet-version: 10.x
 
       - name: Build
         shell: bash
@@ -53,7 +37,7 @@ jobs:
           tag=$(git describe --tags --abbrev=0)
           release_name="MusicDimension-$tag-${{ matrix.target }}"
           # Build everything
-          dotnet publish MusicDimension.csproj --framework net8.0 --runtime "${{ matrix.target }}" --configuration Release --output "$release_name" --self-contained true
+          dotnet publish MusicDimension.csproj --framework net10.0 --runtime "${{ matrix.target }}" --configuration Release --output "$release_name" --self-contained true
           # Pack files
           if [ "${{ matrix.target }}" == "win-x64" ]; then
             # Pack to zip for Windows
@@ -64,7 +48,7 @@ jobs:
           # Delete output directory
           rm -r "$release_name"
       - name: Publish .net
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: "MusicDimension-*"
         env:

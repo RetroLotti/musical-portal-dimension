@@ -1,0 +1,15 @@
+[Unit]
+Description=Apply Music Dimension Spotify receiver settings
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/musicdimension/configure-receiver.py
+StateDirectory=musicdimension-receiver
+StateDirectoryMode=0755
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/etc/musicdimension-soloist /etc/systemd/system /var/lib/musicdimension-receiver
+TimeoutStartSec=300

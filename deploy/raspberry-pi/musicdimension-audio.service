@@ -1,0 +1,24 @@
+[Unit]
+Description=Private audio server for Music Dimension Soloist
+After=sound.target
+
+[Service]
+Type=simple
+User=musicdimension
+Group=musicdimension
+SupplementaryGroups=audio
+Environment=HOME=/var/lib/musicdimension
+Environment=XDG_RUNTIME_DIR=/run/musicdimension-audio
+RuntimeDirectory=musicdimension-audio
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/pulseaudio -n --daemonize=no --exit-idle-time=-1 --use-pid-file=no --disallow-exit --log-target=journal --file=/etc/musicdimension-soloist/pulse.pa
+Restart=on-failure
+RestartSec=5
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/musicdimension
+
+[Install]
+WantedBy=multi-user.target

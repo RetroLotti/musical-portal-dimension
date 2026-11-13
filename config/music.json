@@ -1,55 +1,37 @@
 {
-  "validSourceTypes": [ "spotify", "local", "other" ],
-  "validSpotifyTypes":  [ "album", "track", "playlist" ],
-  "validControlTypes": [ "stop", "pause", "play", "next", "previous", "repeat", "shuffle", "volumneup", "volumnedown" ],
-  /* set these to you liking */
-  "controlTags": {
-    "00-00-00-00-00-00-00": "pause",
-    "00-00-00-00-00-00-01": "next"
-  },
-  /* to be implemented / just a reference for myself */
-  "unusedTags": {
-    "04-06-BC-7A-5C-49-81": "The Doctor",
-    "04-A2-81-0A-B4-43-80": "Scooby Doo",
-    "04-71-8A-A2-13-43-80": "Shaggy",
-    "04-20-B4-C2-6D-40-81": "Wyldstyle",
-    "04-36-EC-62-19-4A-81": "Empty Vehicle Tag",
-    "04-AA-86-12-5B-49-80": "K9",
-    "04-F8-63-1A-A8-48-80": "Mystery Machine",
-    "04-78-86-A2-B9-3F-80": "Empty Vehicle Tag",
-    "04-8A-59-02-5B-49-80": "Scooby Snack",
-    "04-43-35-92-75-40-81": "Batmobile",
-    "04-3C-82-12-5B-49-80": "T.A.R.D.I.S."
-  },
-  /* to be implemented */
-  "shortTags": {
-    "04-27-C1-9A-F0-4A-81": "spotify:track:63y2aL2dT6zzw8FOSLaNrp",
-    "04-64-63-5A-9A-40-80": "spotify:track:6zW80jVqLtgSF1yCtGHiiD",
-    "04-2F-8C-02-9A-40-80": "spotify:playlist:6XhhPuQl9ySFyQD3lfHHxK",
-    "04-7A-B7-2A-F6-48-81": "spotify:track:49rm3b1tcPvHCBtt59bas1"
-  },
+  "validSourceTypes": [
+    "spotify",
+    "local",
+    "other"
+  ],
+  "validSpotifyTypes": [
+    "album",
+    "track",
+    "playlist"
+  ],
+  "validControlTypes": [
+    "stop",
+    "pause",
+    "play",
+    "next",
+    "previous",
+    "repeat",
+    "shuffle",
+    "volumneup",
+    "volumnedown"
+  ],
+  "unusedTags": {},
   "registeredTags": [
     {
       "uid": "04-27-C1-9A-F0-4A-81",
-      "name": "Beetlejuice",
+      "name": "JUNGE",
       "songs": [
         {
-          "name": "This is Halloween",
+          "name": "JUNGE",
           "type": "spotify",
+          "path": null,
           "spotifyType": "track",
-          "spotifyId": "63y2aL2dT6zzw8FOSLaNrp"
-        }
-      ]
-    },
-    {
-      "uid": "04-64-63-5A-9A-40-80",
-      "name": "Gandalf",
-      "songs": [
-        {
-          "name": "The Shire",
-          "type": "spotify",
-          "spotifyType": "track",
-          "spotifyId": "6zW80jVqLtgSF1yCtGHiiD"
+          "spotifyId": "10waMsh44ojvTwXAIy213n"
         }
       ]
     },
@@ -58,22 +40,11 @@
       "name": "Batman",
       "songs": [
         {
-          "name": "Smooth Music",
+          "name": "Spotify Playlist Example",
           "type": "spotify",
+          "path": null,
           "spotifyType": "playlist",
           "spotifyId": "6XhhPuQl9ySFyQD3lfHHxK"
-        }
-      ]
-    },
-    {
-      "uid": "04-7A-B7-2A-F6-48-81",
-      "name": "Just an empty vehicle",
-      "songs": [
-        {
-          "name": "Pommesgabel",
-          "type": "spotify",
-          "spotifyType": "track",
-          "spotifyId": "49rm3b1tcPvHCBtt59bas1"
         }
       ]
     },
@@ -82,13 +53,64 @@
       "name": "Peter Venkman",
       "songs": [
         {
-          "name": "Just some Music (ogg)",
+          "name": "Local Track Example",
           "type": "local",
           "path": "media#rick.ogg",
-          "spotifyType": "",
+          "spotifyType": null,
           "spotifyId": ""
         }
       ]
+    },
+    {
+      "uid": "AA-AA-AA-AA-AA-AA-AA",
+      "name": "Random Shit",
+      "songs": [
+        {
+          "name": "Verteidiger des Blödsinns",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "18dgCFKITVogAIDL80kNoH"
+        },
+        {
+          "name": "Sanctified with Dynamite",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "2ZUUturolW3VpzXWzPEy2X"
+        },
+        {
+          "name": "Hundi",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "3MG41H7SMuPeHwAFvZEpHa"
+        },
+        {
+          "name": "Pommesgabel",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "7GqSADuSLxMkdwcWc1bR0c"
+        },
+        {
+          "name": "Ich fühl' mich Disco",
+          "type": "spotify",
+          "path": null,
+          "spotifyType": "track",
+          "spotifyId": "2zUKhXh78KzEnC7NzigNjn"
+        }
+      ]
     }
-  ]
+  ],
+  "shortTags": {
+    "04-27-C1-9A-F0-4A-81": "spotify:track:63y2aL2dT6zzw8FOSLaNrp",
+    "04-64-63-5A-9A-40-80": "spotify:track:6zW80jVqLtgSF1yCtGHiiD",
+    "04-2F-8C-02-9A-40-80": "spotify:playlist:6XhhPuQl9ySFyQD3lfHHxK",
+    "04-7A-B7-2A-F6-48-81": "spotify:track:49rm3b1tcPvHCBtt59bas1"
+  },
+  "controlTags": {
+    "00-00-00-00-00-00-00": "pause",
+    "1D-3E-39-E6-08-10-80": "next"
+  }
 }

@@ -4,6 +4,15 @@
 
     public class MusicConfig
     {
+        [JsonProperty("validSourceTypes")]
+        public List<string> ValidSourceTypes { get; set; } = [];
+
+        [JsonProperty("validSpotifyTypes")]
+        public List<string> ValidSpotifyTypes { get; set; } = [];
+
+        [JsonProperty("validControlTypes")]
+        public List<string> ValidControlTypes { get; set; } = [];
+
         [JsonProperty("unusedTags")]
         public Dictionary<string, string> UnusedTags { get; set; } = [];
 
@@ -14,7 +23,6 @@
         [JsonProperty("shortTags")]
         public Dictionary<string, string> ShortTags { get; set; } = [];
 
-        // TODO: this is not fully implemented yet
         [JsonProperty("controlTags")]
         public Dictionary<string, string> ControlTags { get; set; } = [];
     }
