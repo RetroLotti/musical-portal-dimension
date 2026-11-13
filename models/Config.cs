@@ -28,6 +28,9 @@
 
     public class ReceiverConfig
     {
+        [JsonIgnore]
+        public string? SoloistApiKey { get; set; }
+
         [JsonProperty("enabled")]
         public bool Enabled { get; set; } = true;
 

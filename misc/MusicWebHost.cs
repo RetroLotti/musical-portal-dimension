@@ -57,10 +57,10 @@ namespace MusicDimension.misc
                     return Results.Problem($"Could not save media settings: {exception.Message}");
                 }
             });
-            app.MapGet("/api/spotify/receiver", (HttpContext context) =>
+            app.MapGet("/api/spotify/receiver", async (HttpContext context, CancellationToken cancellationToken) =>
             {
                 context.Response.Headers.CacheControl = "no-store";
-                return Results.Ok(GetReceiverStatus());
+                return Results.Ok(await GetReceiverStatusAsync(cancellationToken));
             });
             app.MapGet("/api/spotify/devices", async (HttpContext context, CancellationToken cancellationToken) =>
             {
@@ -116,6 +116,9 @@ namespace MusicDimension.misc
                     || string.IsNullOrEmpty(receiver.AudioDevice) || receiver.AudioDevice.Length > 128
                     || !Regex.IsMatch(receiver.AudioDevice, @"\A[A-Za-z0-9_:,=.\-]+\z"))
                     return Results.BadRequest(new { message = "Choose 96, 160, or 320 kbps and a valid ALSA audio device (for example default or plughw:CARD=Headphones,DEV=0)." });
+                if (receiver.SoloistApiKey != null && (receiver.SoloistApiKey.Length > 4096
+                    || receiver.SoloistApiKey.Any(character => character < 33 || character > 126)))
+                    return Results.BadRequest(new { message = "Enter a valid Soloist API key without whitespace (maximum 4096 characters)." });
                 var deviceName = request.SpotifyDeviceName?.Trim() ?? "";
                 if (deviceName.Length > 100 || deviceName.Any(char.IsControl)
                     || (request.Receiver != null && deviceName.Length == 0))
@@ -163,18 +166,27 @@ namespace MusicDimension.misc
         {
             var configuration = spotify.Configuration;
             return new(configuration.Enable, configuration.ClientId, configuration.SpotifyDeviceName,
-                !string.IsNullOrEmpty(configuration.ClientSecret), configuration.Receiver);
+                !string.IsNullOrEmpty(configuration.ClientSecret), new ReceiverSettingsResponse(configuration.Receiver.Enabled,
+                    configuration.Receiver.AudioDevice, configuration.Receiver.Bitrate, spotify.HasSoloistApiKey));
         }
 
-        private static ReceiverStatusResponse GetReceiverStatus()
+        private static async Task<ReceiverStatusResponse> GetReceiverStatusAsync(CancellationToken cancellationToken)
         {
             if (!OperatingSystem.IsLinux() || !File.Exists("/usr/local/lib/musicdimension/configure-receiver.py"))
                 return new(false, "unmanaged", false, "Receiver management is available after running the Raspberry Pi installer.", null, null, null, null);
             try
             {
-                return JsonSerializer.Deserialize<ReceiverStatusResponse>(File.ReadAllText("/var/lib/musicdimension-receiver/status.json"),
+                var status = JsonSerializer.Deserialize<ReceiverStatusResponse>(await File.ReadAllTextAsync("/var/lib/musicdimension-receiver/status.json", cancellationToken),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new(true, "unknown", false, "Waiting for the receiver configuration service.", null, null, null, null);
+                if (status.Backend != "soloist")
+                    return status with { Error = "Run the updated Pi installer to replace the old Raspotify receiver with Spotify Soloist." };
+                if (status.ActiveState == "active")
+                {
+                    var loggedIn = await ReadSoloistLoginAsync(new Uri("ws://127.0.0.1:9876"), cancellationToken);
+                    return status with { LoggedIn = loggedIn, CredentialsCached = loggedIn == true };
+                }
+                return status;
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
             {
@@ -182,9 +194,46 @@ namespace MusicDimension.misc
             }
         }
 
+        private static async Task<bool?> ReadSoloistLoginAsync(Uri endpoint, CancellationToken cancellationToken)
+        {
+            if (!endpoint.IsLoopback || endpoint.Scheme != "ws") throw new ArgumentException("Soloist status must use a loopback WebSocket.");
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(3));
+            using var socket = new System.Net.WebSockets.ClientWebSocket();
+            socket.Options.Proxy = null;
+            try
+            {
+                await socket.ConnectAsync(endpoint, timeout.Token);
+                var buffer = new byte[16384];
+                for (var message = 0; message < 8; message++)
+                {
+                    var count = 0;
+                    System.Net.WebSockets.WebSocketReceiveResult result;
+                    do
+                    {
+                        if (count == buffer.Length) return null;
+                        result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer, count, buffer.Length - count), timeout.Token);
+                        if (result.MessageType != System.Net.WebSockets.WebSocketMessageType.Text) return null;
+                        count += result.Count;
+                    } while (!result.EndOfMessage);
+                    using var document = JsonDocument.Parse(buffer.AsMemory(0, count));
+                    if (document.RootElement.TryGetProperty("type", out var type) && type.GetString() == "auth_state"
+                        && document.RootElement.TryGetProperty("logged_in", out var loggedIn) && loggedIn.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                        return loggedIn.GetBoolean();
+                }
+            }
+            catch (Exception exception) when (exception is System.Net.WebSockets.WebSocketException or JsonException
+                || exception is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+            return null;
+        }
+
         /// <summary>Receiver runtime and applied configuration reported by the root-owned systemd helper.</summary>
         public sealed record ReceiverStatusResponse(bool Managed, string ActiveState, bool CredentialsCached, string? Error,
-            string? Name, string? AudioDevice, int? Bitrate, bool? Enabled);
+            string? Name, string? AudioDevice, int? Bitrate, bool? Enabled, string? Backend = null,
+            bool? LoggedIn = null, bool ApiKeyConfigured = false, JsonElement? Update = null);
 
         private static async Task<IResult> GetSpotifyDevicesAsync(SpotifyHandler spotify, CancellationToken cancellationToken)
         {
@@ -285,7 +334,10 @@ namespace MusicDimension.misc
         public sealed record UpdateSpotifySettingsRequest(bool Enable, string? ClientId, string? SpotifyDeviceName, string? ClientSecret, ReceiverConfig? Receiver = null);
 
         /// <summary>Spotify settings without credentials or token file paths.</summary>
-        public sealed record SpotifySettingsResponse(bool Enable, string ClientId, string SpotifyDeviceName, bool HasClientSecret, ReceiverConfig Receiver);
+        public sealed record SpotifySettingsResponse(bool Enable, string ClientId, string SpotifyDeviceName, bool HasClientSecret, ReceiverSettingsResponse Receiver);
+
+        /// <summary>Receiver settings without the private Spotify Soloist API key.</summary>
+        public sealed record ReceiverSettingsResponse(bool Enabled, string AudioDevice, int Bitrate, bool HasSoloistApiKey);
 
         /// <summary>Maximum accepted media file size in MiB.</summary>
         public sealed record MediaSettingsResponse(int MaxFileSizeMb);

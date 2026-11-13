@@ -1,0 +1,32 @@
+[Unit]
+Description=Spotify Soloist receiver for Music Dimension
+Wants=network-online.target musicdimension-audio.service
+After=network-online.target musicdimension-audio.service
+ConditionPathExists=/etc/musicdimension-soloist/receiver.json
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=musicdimension
+Group=musicdimension
+SupplementaryGroups=audio
+Environment=HOME=/var/lib/musicdimension
+Environment=XDG_RUNTIME_DIR=/run/musicdimension-audio
+Environment=PULSE_SERVER=unix:/run/musicdimension-audio/native
+ExecStartPre=+/usr/bin/python3 -I /usr/local/lib/musicdimension/update-soloist.py
+ExecStart=/usr/bin/python3 -I /usr/local/lib/musicdimension/run-soloist.py
+Restart=on-failure
+RestartSec=15
+StateDirectory=musicdimension
+CacheDirectory=musicdimension
+UMask=0077
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/opt/musicdimension-soloist /var/lib/musicdimension-receiver
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

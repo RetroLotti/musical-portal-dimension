@@ -140,25 +140,26 @@
           <legend>Pi Spotify Connect receiver</legend>
           <label class="spotify-toggle" for="receiverEnabled">
             <input id="receiverEnabled" type="checkbox">
-            Enable Raspotify receiver
+            Enable Spotify Soloist receiver
           </label>
           <div class="control-fields">
             <div class="field-group">
-              <label for="receiverAudioDevice">ALSA audio device</label>
+              <label for="receiverAudioDevice">ALSA output (via private PulseAudio)</label>
               <input id="receiverAudioDevice" type="text" maxlength="128" placeholder="plughw:CARD=Headphones,DEV=0" autocomplete="off">
             </div>
             <div class="field-group">
-              <label for="receiverBitrate">Audio bitrate</label>
-              <select id="receiverBitrate">
-                <option value="96">96 kbps</option>
-                <option value="160">160 kbps</option>
-                <option value="320">320 kbps</option>
-              </select>
+              <label for="soloistApiKey">Spotify Soloist API key</label>
+              <input id="soloistApiKey" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false">
             </div>
           </div>
+          <label class="spotify-toggle" for="clearSoloistApiKey">
+            <input id="clearSoloistApiKey" type="checkbox">
+            Clear saved Soloist API key
+          </label>
+          <a class="spotify-result-link" href="https://developer.spotify.com/dashboard/soloist" target="_blank" rel="noopener noreferrer">Spotify Soloist API key dashboard ↗</a>
         </fieldset>
         <div class="receiver-status-row">
-          <span id="receiverStatus" class="form-message" role="status" aria-live="polite">Checking receiver</span>
+          <span id="receiverStatus" class="form-message" role="status" aria-live="polite">Checking Soloist receiver</span>
           <button id="refreshReceiverStatus" class="icon-button" type="button" title="Refresh receiver status" aria-label="Refresh receiver status">↻</button>
         </div>
         <div class="control-footer">

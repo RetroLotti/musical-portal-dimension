@@ -28,13 +28,7 @@ case "${ARCHITECTURE}" in
 esac
 
 if [[ "${ARCHITECTURE}" == "armhf" && "$(uname -m)" == armv6* ]]; then
-    echo "Current Raspotify requires ARMv7 or newer. Pi 1 and original Pi Zero are not supported." >&2
-    exit 1
-fi
-
-if systemctl is-active --quiet librespot.service || systemctl is-enabled --quiet librespot.service; then
-    echo "A standalone librespot service is running or enabled. Stop/disable it before installing Raspotify:" >&2
-    echo "  sudo systemctl disable --now librespot.service" >&2
+    echo "Spotify Soloist requires ARMv7 or newer. Pi 1 and original Pi Zero are not supported." >&2
     exit 1
 fi
 
@@ -49,18 +43,13 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libvlc5 \
     libvlc-dev \
     python3 \
+    pulseaudio \
+    alsa-utils \
+    libatomic1 \
+    libnss3 \
+    libglib2.0-0 \
     tar \
     vlc-plugin-base
-
-echo "Installing Raspotify (includes librespot) from its signed APT repository..."
-install -d -m 0755 /usr/share/keyrings
-curl --fail --location --retry 3 --silent --show-error \
-    https://dtcooper.github.io/raspotify/key.asc -o /usr/share/keyrings/raspotify_key.asc
-chmod 0644 /usr/share/keyrings/raspotify_key.asc
-printf '%s\n' 'deb [signed-by=/usr/share/keyrings/raspotify_key.asc] https://dtcooper.github.io/raspotify raspotify main' \
-    > /etc/apt/sources.list.d/raspotify.list
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y raspotify avahi-daemon alsa-utils
 
 for group in plugdev audio; do
     if ! getent group "${group}" >/dev/null; then
@@ -75,6 +64,42 @@ usermod -aG plugdev,audio "${SERVICE_USER}"
 
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
+ASSET_URL=""
+
+build_from_source() {
+    if [[ "${RUNTIME_ID}" != "linux-arm64" ]]; then
+        echo "The source-build fallback requires 64-bit Raspberry Pi OS. Use a current ARM release with Soloist support." >&2
+        return 1
+    fi
+
+    echo "Building a self-contained .NET 10 ARM64 publish from source."
+    curl --fail --location --retry 3 --silent --show-error https://dot.net/v1/dotnet-install.sh -o "${TEMP_DIR}/dotnet-install.sh"
+    bash "${TEMP_DIR}/dotnet-install.sh" --channel 10.0 --architecture arm64 --install-dir "${TEMP_DIR}/dotnet"
+
+    if [[ "${VERSION}" == "latest" ]]; then
+        SOURCE_URL="https://github.com/${REPOSITORY}/archive/refs/heads/main.tar.gz"
+    else
+        ENCODED_VERSION="$(python3 - "${VERSION}" <<'PY'
+import sys
+import urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+)"
+        SOURCE_URL="https://github.com/${REPOSITORY}/archive/refs/tags/${ENCODED_VERSION}.tar.gz"
+    fi
+
+    mkdir -p "${TEMP_DIR}/source"
+    curl --fail --location --retry 3 --silent --show-error "${SOURCE_URL}" -o "${TEMP_DIR}/source.tar.gz"
+    tar -xzf "${TEMP_DIR}/source.tar.gz" -C "${TEMP_DIR}/source" --no-same-owner
+    PROJECT_FILE="$(find "${TEMP_DIR}/source" -name MusicDimension.csproj -print -quit)"
+    if [[ -z "${PROJECT_FILE}" ]]; then
+        echo "The source archive does not contain MusicDimension.csproj." >&2
+        return 1
+    fi
+
+    "${TEMP_DIR}/dotnet/dotnet" publish "${PROJECT_FILE}" --framework net10.0 --runtime linux-arm64 --configuration Release --self-contained true --output "${TEMP_DIR}/publish"
+    PUBLISH_DIR="${TEMP_DIR}/publish"
+}
 
 if [[ -n "${MUSICDIMENSION_PUBLISH_DIR:-}" ]]; then
     PUBLISH_DIR="$(realpath "${MUSICDIMENSION_PUBLISH_DIR}")"
@@ -140,40 +165,7 @@ if [[ -n "${ASSET_URL}" ]]; then
     fi
     PUBLISH_DIR="$(dirname "${APP_HOST}")"
 else
-    if [[ "${RUNTIME_ID}" != "linux-arm64" ]]; then
-        echo "No ${RUNTIME_ID} release asset exists. The automatic source-build fallback requires 64-bit Raspberry Pi OS." >&2
-        echo "Use Raspberry Pi OS 64-bit or publish a linux-arm release first." >&2
-        exit 1
-    fi
-
-    echo "No ARM64 release asset exists; building a self-contained .NET 10 ARM64 publish on this Pi."
-    curl --fail --location --retry 3 --silent --show-error https://dot.net/v1/dotnet-install.sh -o "${TEMP_DIR}/dotnet-install.sh"
-    bash "${TEMP_DIR}/dotnet-install.sh" --channel 10.0 --architecture arm64 --install-dir "${TEMP_DIR}/dotnet"
-
-    if [[ "${VERSION}" == "latest" ]]; then
-        SOURCE_URL="https://github.com/${REPOSITORY}/archive/refs/heads/main.tar.gz"
-    else
-        ENCODED_VERSION="$(python3 - "${VERSION}" <<'PY'
-import sys
-import urllib.parse
-print(urllib.parse.quote(sys.argv[1], safe=""))
-PY
-)"
-        SOURCE_URL="https://github.com/${REPOSITORY}/archive/refs/tags/${ENCODED_VERSION}.tar.gz"
-    fi
-
-    mkdir -p "${TEMP_DIR}/source"
-    curl --fail --location --retry 3 --silent --show-error "${SOURCE_URL}" -o "${TEMP_DIR}/source.tar.gz"
-    tar -xzf "${TEMP_DIR}/source.tar.gz" -C "${TEMP_DIR}/source" --no-same-owner
-    PROJECT_FILE="$(find "${TEMP_DIR}/source" -name MusicDimension.csproj -print -quit)"
-    if [[ -z "${PROJECT_FILE}" ]]; then
-        echo "The source archive does not contain MusicDimension.csproj." >&2
-        exit 1
-    fi
-
-    SOURCE_DIR="$(dirname "${PROJECT_FILE}")"
-    "${TEMP_DIR}/dotnet/dotnet" publish "${PROJECT_FILE}" --framework net10.0 --runtime linux-arm64 --configuration Release --self-contained true --output "${TEMP_DIR}/publish"
-    PUBLISH_DIR="${TEMP_DIR}/publish"
+    build_from_source
 fi
 fi
 
@@ -183,12 +175,47 @@ if [[ ! -f "${SERVICE_FILE}" || ! -f "${UDEV_FILE}" ]]; then
     echo "The release is missing the Raspberry Pi service or USB rule." >&2
     exit 1
 fi
-for receiver_file in configure-receiver.py musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer raspotify-musicdimension.conf; do
+for receiver_file in configure-receiver.py update-soloist.py run-soloist.py musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
     if [[ ! -f "${PUBLISH_DIR}/deploy/raspberry-pi/${receiver_file}" ]]; then
-        echo "Release lacks receiver integration (${receiver_file}). Use a release containing the new installer support." >&2
+        if [[ -n "${ASSET_URL}" && "${VERSION}" == "latest" ]]; then
+            echo "The latest GitHub release is missing Soloist support (${receiver_file}); building current source instead."
+            build_from_source
+            break
+        fi
+        echo "Selected install source lacks Soloist integration (${receiver_file}). Use the latest source installer or a compatible release." >&2
         exit 1
     fi
 done
+
+for receiver_file in configure-receiver.py update-soloist.py run-soloist.py musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
+    if [[ ! -f "${PUBLISH_DIR}/deploy/raspberry-pi/${receiver_file}" ]]; then
+        echo "Selected source is still missing required Soloist file ${receiver_file}. No existing application or receiver services were stopped." >&2
+        exit 1
+    fi
+done
+
+echo "Checking the official Soloist build on this OS before changing installed services..."
+getconf GNU_LIBC_VERSION || true
+install -d -o root -g root -m 0755 /opt/musicdimension-soloist /var/lib/musicdimension-receiver
+if ! /usr/bin/python3 -I "${PUBLISH_DIR}/deploy/raspberry-pi/update-soloist.py"; then
+    echo "Soloist preflight failed. Existing application files and service enablement have not been changed." >&2
+    echo "Resolve the reported download/runtime problem before retrying. Do not manually replace the system glibc." >&2
+    exit 1
+fi
+
+OLD_INSTALLATION_FOUND=false
+if [[ -L "${INSTALL_DIR}" ]]; then
+    echo "Refusing to install through symbolic-link path: ${INSTALL_DIR}" >&2
+    exit 1
+elif [[ -d "${INSTALL_DIR}" ]]; then
+    OLD_INSTALLATION_FOUND=true
+    echo "Existing MusicDimension installation found; preserving config and media and replacing application files."
+elif [[ -e "${INSTALL_DIR}" ]]; then
+    echo "Refusing to remove unexpected non-directory path: ${INSTALL_DIR}" >&2
+    exit 1
+else
+    echo "No previous MusicDimension installation found at ${INSTALL_DIR}; continuing with a clean install."
+fi
 
 mkdir -p "${INSTALL_DIR}/config" "${INSTALL_DIR}/media"
 chown root:root "${INSTALL_DIR}"
@@ -199,15 +226,82 @@ for data_directory in config media; do
     fi
 done
 
+python3 - "${INSTALL_DIR}/config/config.json" "${INSTALL_DIR}/config/music.json" <<'PY'
+import json
+import os
+import socket
+import sys
+
+config_path, music_path = sys.argv[1:]
+if os.path.exists(config_path):
+    with open(config_path, encoding="utf-8") as source:
+        config = json.load(source)
+    if not isinstance(config, dict):
+        raise SystemExit("config/config.json must contain a JSON object; existing file was left unchanged.")
+else:
+    config = {
+        "enable": False,
+        "clientId": "",
+        "clientSecret": "",
+        "spotifyDeviceName": "",
+        "receiver": {"enabled": True, "audioDevice": "plughw:CARD=Headphones,DEV=0", "bitrate": 160},
+        "mediaMaxFileSizeMb": 512,
+    }
+    print("No existing config/config.json found; creating safe defaults. Configure Spotify in the web manager.")
+
+name = config.get("spotifyDeviceName")
+if not isinstance(name, str) or not name.strip():
+    config["spotifyDeviceName"] = "Music Dimension (" + socket.gethostname() + ")"
+receiver = config.setdefault("receiver", {"enabled": True, "audioDevice": "plughw:CARD=Headphones,DEV=0", "bitrate": 160})
+if not isinstance(receiver, dict):
+    raise SystemExit("config/config.json receiver setting must be an object; existing file was left unchanged.")
+if receiver.get("audioDevice") == "default":
+    receiver["audioDevice"] = "plughw:CARD=Headphones,DEV=0"
+    print("Updated the receiver's unresolved ALSA default to the Raspberry Pi headphone output.")
+config.setdefault("mediaMaxFileSizeMb", 512)
+temporary = config_path + ".install-tmp"
+with open(temporary, "w", encoding="utf-8") as output:
+    json.dump(config, output, indent=2)
+os.chmod(temporary, 0o600)
+os.replace(temporary, config_path)
+
+if not os.path.exists(music_path):
+    music = {
+        "validSourceTypes": ["spotify", "local", "other"],
+        "validSpotifyTypes": ["album", "track", "playlist"],
+        "validControlTypes": ["stop", "pause", "play", "next", "previous", "shuffle", "volumeup", "volumedown"],
+        "unusedTags": {}, "registeredTags": [], "shortTags": {}, "controlTags": {}
+    }
+    temporary = music_path + ".install-tmp"
+    with open(temporary, "w", encoding="utf-8") as output:
+        json.dump(music, output, indent=2)
+    os.replace(temporary, music_path)
+    print("No existing config/music.json found; created an empty tag library and control-tag map.")
+PY
+
 systemctl stop "${SERVICE_NAME}" >/dev/null 2>&1 || true
-shopt -s dotglob nullglob
-for existing in "${INSTALL_DIR}"/*; do
-    name="$(basename "${existing}")"
-    case "${name}" in
-        config|media) continue ;;
-    esac
-    rm -rf -- "${existing}"
+systemctl stop musicdimension-receiver.path musicdimension-receiver.timer musicdimension-receiver.service >/dev/null 2>&1 || true
+echo "Migrating from Raspotify/librespot to Spotify Soloist; existing receiver caches are retained."
+for old_receiver in raspotify.service librespot.service; do
+    if systemctl cat "${old_receiver}" >/dev/null 2>&1; then
+        systemctl disable --now "${old_receiver}"
+    fi
 done
+if [[ "${OLD_INSTALLATION_FOUND}" == true && -d "${INSTALL_DIR}" ]]; then
+    shopt -s dotglob nullglob
+    for existing in "${INSTALL_DIR}"/*; do
+        name="$(basename "${existing}")"
+        case "${name}" in
+            config|media) continue ;;
+        esac
+        rm -rf -- "${existing}"
+    done
+    shopt -u dotglob nullglob
+else
+    echo "Skipping removal: no previous application files were found."
+fi
+
+shopt -s dotglob nullglob
 for item in "${PUBLISH_DIR}"/*; do
     name="$(basename "${item}")"
     case "${name}" in
@@ -237,19 +331,18 @@ PY
 chmod 0755 "${INSTALL_DIR}/MusicDimension"
 install -m 0644 "${UDEV_FILE}" /etc/udev/rules.d/99-lego-dimensions.rules
 install -m 0644 "${SERVICE_FILE}" "/etc/systemd/system/${SERVICE_NAME}.service"
-install -d -o root -g root -m 0755 /usr/local/lib/musicdimension /etc/systemd/system/raspotify.service.d /var/lib/musicdimension-receiver
+install -d -o root -g root -m 0755 /usr/local/lib/musicdimension /etc/musicdimension-soloist /opt/musicdimension-soloist /var/lib/musicdimension-receiver
 install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/configure-receiver.py" /usr/local/lib/musicdimension/configure-receiver.py
-for unit in musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
+install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/update-soloist.py" /usr/local/lib/musicdimension/update-soloist.py
+install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/run-soloist.py" /usr/local/lib/musicdimension/run-soloist.py
+for unit in musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
     install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/${unit}" "/etc/systemd/system/${unit}"
 done
-install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/raspotify-musicdimension.conf" \
-    /etc/systemd/system/raspotify.service.d/musicdimension.conf
-install -d -m 0755 /etc/raspotify
+install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" -m 0700 /var/lib/musicdimension/soloist /var/cache/musicdimension/soloist
 
 udevadm control --reload-rules
 udevadm trigger --subsystem-match=usb
 systemctl daemon-reload
-systemctl enable --now avahi-daemon.service
 systemctl start musicdimension-receiver.service
 systemctl enable --now musicdimension-receiver.path musicdimension-receiver.timer
 systemctl enable --now "${SERVICE_NAME}"
@@ -265,6 +358,9 @@ echo "Music Dimension is installed and will start automatically at boot."
 echo "Service status: systemctl status ${SERVICE_NAME}"
 echo "Logs:           journalctl -u ${SERVICE_NAME} -f"
 echo "Web manager:    http://<pi-ip-address>:5080 (trusted LAN only; or use an SSH tunnel)."
-echo "Raspotify is installed with persistent credentials. Pair it once from Spotify on the same LAN."
-echo "Configure the receiver and connect the Spotify Web API account in the web manager's Spotify settings."
-echo "Receiver logs:  journalctl -u raspotify -f"
+echo "Spotify Soloist is installed directly from Spotify. The app checks for updated builds at every service start."
+echo "Generate your own Soloist API key at https://developer.spotify.com/dashboard/soloist and save it in Spotify settings."
+echo "Pair Soloist once from the Spotify app on the same LAN; its session is retained across updates and reboots."
+echo "The Soloist API key and the application's Web API OAuth authorization are separate."
+echo "Receiver logs:  journalctl -u musicdimension-soloist -f"
+echo "Audio logs:     journalctl -u musicdimension-audio -f"

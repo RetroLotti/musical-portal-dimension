@@ -698,8 +698,12 @@ async function loadReceiverStatus() {
     return;
   }
   const name = status.name ? ` - ${status.name}` : "";
-  const audio = status.audioDevice ? ` - ${status.audioDevice}, ${status.bitrate} kbps` : "";
-  message.textContent = status.error ?? `Raspotify: ${status.activeState}${name}${audio}. ${status.credentialsCached ? "Receiver credentials cached." : "Receiver pairing required: select this Pi once in Spotify on the same LAN."}`;
+  const audio = status.audioDevice ? ` - ${status.audioDevice}` : "";
+  const login = !status.apiKeyConfigured ? "Soloist API key required." : status.loggedIn === true
+    ? "Spotify Connect session authenticated." : status.loggedIn === false ? "Pairing required: select this Pi once in Spotify on the same LAN."
+    : "Spotify Connect session status unavailable.";
+  const update = status.update ? ` Update: ${status.update.state}${status.update.version ? ` (${status.update.version})` : ""}.${status.update.error ? ` ${status.update.error}` : ""}` : "";
+  message.textContent = status.error ?? `Soloist: ${status.activeState}${name}${audio}. ${login}${update}`;
 }
 
 document.querySelector("#refreshReceiverStatus").addEventListener("click", async event => {
@@ -781,7 +785,9 @@ async function loadSpotifySettings() {
   document.querySelector("#spotifyClearSecret").checked = false;
   document.querySelector("#receiverEnabled").checked = settings.receiver?.enabled ?? true;
   document.querySelector("#receiverAudioDevice").value = settings.receiver?.audioDevice ?? "plughw:CARD=Headphones,DEV=0";
-  document.querySelector("#receiverBitrate").value = String(settings.receiver?.bitrate ?? 160);
+  document.querySelector("#soloistApiKey").value = "";
+  document.querySelector("#soloistApiKey").placeholder = settings.receiver?.hasSoloistApiKey ? "Saved (unchanged)" : "Not set";
+  document.querySelector("#clearSoloistApiKey").checked = false;
   await loadReceiverStatus();
   await loadSpotifyAuthorization();
 }
@@ -893,7 +899,8 @@ async function saveSpotifySettings(event) {
         receiver: receiverManaged ? {
           enabled: document.querySelector("#receiverEnabled").checked,
           audioDevice: document.querySelector("#receiverAudioDevice").value.trim(),
-          bitrate: Number(document.querySelector("#receiverBitrate").value)
+          soloistApiKey: document.querySelector("#clearSoloistApiKey").checked
+            ? "" : document.querySelector("#soloistApiKey").value.trim() || null
         } : null
       })
     });

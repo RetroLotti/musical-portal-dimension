@@ -26,7 +26,7 @@ Content-Type: application/json
   ]
 }
 
-### Managed Raspotify receiver status and last applied settings
+### Managed Soloist receiver login, version/update status, and applied settings
 GET {{baseUrl}}/api/spotify/receiver
 
 ### Update Spotify and receiver settings (use your client ID)
@@ -41,7 +41,7 @@ Content-Type: application/json
   "receiver": {
     "enabled": true,
     "audioDevice": "plughw:CARD=Headphones,DEV=0",
-    "bitrate": 160
+    "soloistApiKey": null
   }
 }
 
