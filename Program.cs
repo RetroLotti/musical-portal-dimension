@@ -13,6 +13,7 @@
         private static PortalHandler _portalHandler = null!;
         private static SpotifyHandler _spotifyHandler = null!;
         private static LocalMusicHandler _localMusicHandler = null!;
+        private static TagPlaybackStore _tagPlaybackStore = null!;
 
         private static Config _config = null!;
         private static MusicConfigStore _musicStore = null!;
@@ -43,6 +44,7 @@
 
             // read music config from file
             _musicStore = new MusicConfigStore(MusicFileName);
+            _tagPlaybackStore = new TagPlaybackStore(Path.Combine(Environment.CurrentDirectory, "config", "tag-playback-state.json"));
             Console.WriteLine($"Object read from {MusicFileName}");
 
             //_localMusicHandler = new LocalMusicHandler();
@@ -91,6 +93,7 @@
             }
             finally
             {
+                await SaveCurrentTagPlaybackStateAsync();
                 _portalHandler.Disconnect();
             }
         }
@@ -136,6 +139,7 @@
                 _portalHandler.IsTransferring = false;
                 _pausedTagUid = _currentTagUid;
                 _pausedPlaybackSource = _currentPlaybackSource;
+                await SaveCurrentTagPlaybackStateAsync();
                 if (_pausedPlaybackSource == SourceTypes.Spotify && _spotifyHandler.Configuration.Enable)
                 {
                     await _spotifyHandler.PauseAsync();
@@ -162,7 +166,25 @@
                     }
                     if (_pausedPlaybackSource == SourceTypes.Spotify)
                     {
-                        await _spotifyHandler.ResumeAsync();
+                        var pausedTag = _musicStore.Snapshot().RegisteredTags
+                            .FirstOrDefault(item => string.Equals(item.Uid, uid, StringComparison.OrdinalIgnoreCase));
+                        var savedState = pausedTag?.ResumePlayback == true ? _tagPlaybackStore.GetSpotify(uid) : null;
+                        if (pausedTag?.ResumePlayback == true && savedState != null)
+                        {
+                            if (await _spotifyHandler.TryResumeAsync(pausedTag.Songs, savedState))
+                            {
+                                Console.WriteLine("Restored saved Spotify position.");
+                            }
+                            else
+                            {
+                                RemoveSavedTagPlaybackState(uid);
+                                await _spotifyHandler.PlayAsync(pausedTag.Songs);
+                            }
+                        }
+                        else
+                        {
+                            await _spotifyHandler.ResumeAsync();
+                        }
                     }
                     else if (_pausedPlaybackSource == SourceTypes.Local)
                     {
@@ -218,11 +240,15 @@
             }
 
             // if tag is read => play associated song / album
-            var songs = GetMusic(uid);
+            var tag = _musicStore.Snapshot().RegisteredTags
+                .FirstOrDefault(item => string.Equals(item.Uid, uid, StringComparison.OrdinalIgnoreCase));
+            var songs = tag?.Songs ?? [];
 
             // quit if no songs are configured
             if (songs.Count == 0) { Console.WriteLine($"No song configured for uid {uid}!"); return;}
             var song = songs[0];
+
+            await SaveCurrentTagPlaybackStateAsync();
 
             // TODO: get current player info - if current song or album are the same as the requested one the playback should not be reset
 
@@ -235,7 +261,20 @@
                         break;
                     }
 
-                    await _spotifyHandler.PlayAsync(songs);
+                    if (tag!.ResumePlayback)
+                    {
+                        var savedState = _tagPlaybackStore.GetSpotify(uid);
+                        if (savedState == null || !await _spotifyHandler.TryResumeAsync(songs, savedState))
+                        {
+                            RemoveSavedTagPlaybackState(uid);
+                            await _spotifyHandler.PlayAsync(songs);
+                        }
+                    }
+                    else
+                    {
+                        RemoveSavedTagPlaybackState(uid);
+                        await _spotifyHandler.PlayAsync(songs);
+                    }
                     _portalHandler.IsTransferring = true;
                     _currentTagUid = uid;
                     _currentPlaybackSource = SourceTypes.Spotify;
@@ -261,7 +300,19 @@
                         break;
                     }
 
-                    _localMusicHandler.Play(localPaths);
+                    if (tag!.ResumePlayback)
+                    {
+                        var savedState = _tagPlaybackStore.GetLocal(uid);
+                        if (savedState != null && !_localMusicHandler.Play(localPaths, savedState))
+                            RemoveSavedTagPlaybackState(uid);
+                        else if (savedState == null)
+                            _localMusicHandler.Play(localPaths);
+                    }
+                    else
+                    {
+                        RemoveSavedTagPlaybackState(uid);
+                        _localMusicHandler.Play(localPaths);
+                    }
                     _portalHandler.IsTransferring = true;
                     _currentTagUid = uid;
                     _currentPlaybackSource = SourceTypes.Local;
@@ -336,9 +387,42 @@
             }
         }
 
-        private static List<Song> GetMusic(string tagUid)
+        private static async Task SaveCurrentTagPlaybackStateAsync()
         {
-            return _musicStore.GetSongs(tagUid);
+            if (string.IsNullOrWhiteSpace(_currentTagUid)) return;
+            var tag = _musicStore.Snapshot().RegisteredTags
+                .FirstOrDefault(item => string.Equals(item.Uid, _currentTagUid, StringComparison.OrdinalIgnoreCase));
+            if (tag?.ResumePlayback != true) return;
+
+            try
+            {
+                if (_currentPlaybackSource == SourceTypes.Local)
+                {
+                    var state = _localMusicHandler.CapturePlaybackState();
+                    if (state != null) _tagPlaybackStore.SetLocal(_currentTagUid, state);
+                }
+                else if (_currentPlaybackSource == SourceTypes.Spotify && _spotifyHandler.Configuration.Enable)
+                {
+                    var state = await _spotifyHandler.CapturePlaybackStateAsync(tag.Songs);
+                    if (state != null) _tagPlaybackStore.SetSpotify(_currentTagUid, state);
+                }
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"Could not save playback position for tag {_currentTagUid}: {exception.Message}");
+            }
+        }
+
+        private static void RemoveSavedTagPlaybackState(string uid)
+        {
+            try
+            {
+                _tagPlaybackStore.Remove(uid);
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"Could not clear playback position for tag {uid}: {exception.Message}");
+            }
         }
     }
 }

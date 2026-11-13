@@ -60,6 +60,8 @@ In **Playback controls**, scan or enter a different UID for each action, then cl
 
 Shuffle is a toggle. For local queues it randomizes the unplayed tracks without interrupting the current track or repeating already played entries; turning it off restores the remaining tracks' saved order. If local shuffle is still enabled when another tag starts, its queue starts shuffled. Spotify shuffle toggles the configured device's current shuffle state. Control tags can also operate on a paused music tag without losing its resume state. Shuffle state is a playback setting, not a rewrite of the tag's saved track list.
 
+For audiobook-style tags, enable **Resume playback where I left off** while creating or editing the tag. Removing the tag saves its current track and position; reading it again resumes there, including within local M3U playlists and Spotify track queues, albums, and playlists. Positions are stored per tag in `config/tag-playback-state.json` and survive application restarts. If a saved queue changes, its old position is discarded.
+
 ### Spotify Settings And Login
 
 #### Managed Soloist Receiver
