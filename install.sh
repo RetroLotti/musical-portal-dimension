@@ -203,6 +203,20 @@ if ! /usr/bin/python3 -I "${PUBLISH_DIR}/deploy/raspberry-pi/update-soloist.py";
     exit 1
 fi
 
+OLD_INSTALLATION_FOUND=false
+if [[ -L "${INSTALL_DIR}" ]]; then
+    echo "Refusing to install through symbolic-link path: ${INSTALL_DIR}" >&2
+    exit 1
+elif [[ -d "${INSTALL_DIR}" ]]; then
+    OLD_INSTALLATION_FOUND=true
+    echo "Existing MusicDimension installation found; preserving config and media and replacing application files."
+elif [[ -e "${INSTALL_DIR}" ]]; then
+    echo "Refusing to remove unexpected non-directory path: ${INSTALL_DIR}" >&2
+    exit 1
+else
+    echo "No previous MusicDimension installation found at ${INSTALL_DIR}; continuing with a clean install."
+fi
+
 mkdir -p "${INSTALL_DIR}/config" "${INSTALL_DIR}/media"
 chown root:root "${INSTALL_DIR}"
 chmod 0755 "${INSTALL_DIR}"
@@ -212,6 +226,59 @@ for data_directory in config media; do
     fi
 done
 
+python3 - "${INSTALL_DIR}/config/config.json" "${INSTALL_DIR}/config/music.json" <<'PY'
+import json
+import os
+import socket
+import sys
+
+config_path, music_path = sys.argv[1:]
+if os.path.exists(config_path):
+    with open(config_path, encoding="utf-8") as source:
+        config = json.load(source)
+    if not isinstance(config, dict):
+        raise SystemExit("config/config.json must contain a JSON object; existing file was left unchanged.")
+else:
+    config = {
+        "enable": False,
+        "clientId": "",
+        "clientSecret": "",
+        "spotifyDeviceName": "",
+        "receiver": {"enabled": True, "audioDevice": "plughw:CARD=Headphones,DEV=0", "bitrate": 160},
+        "mediaMaxFileSizeMb": 512,
+    }
+    print("No existing config/config.json found; creating safe defaults. Configure Spotify in the web manager.")
+
+name = config.get("spotifyDeviceName")
+if not isinstance(name, str) or not name.strip():
+    config["spotifyDeviceName"] = "Music Dimension (" + socket.gethostname() + ")"
+receiver = config.setdefault("receiver", {"enabled": True, "audioDevice": "plughw:CARD=Headphones,DEV=0", "bitrate": 160})
+if not isinstance(receiver, dict):
+    raise SystemExit("config/config.json receiver setting must be an object; existing file was left unchanged.")
+if receiver.get("audioDevice") == "default":
+    receiver["audioDevice"] = "plughw:CARD=Headphones,DEV=0"
+    print("Updated the receiver's unresolved ALSA default to the Raspberry Pi headphone output.")
+config.setdefault("mediaMaxFileSizeMb", 512)
+temporary = config_path + ".install-tmp"
+with open(temporary, "w", encoding="utf-8") as output:
+    json.dump(config, output, indent=2)
+os.chmod(temporary, 0o600)
+os.replace(temporary, config_path)
+
+if not os.path.exists(music_path):
+    music = {
+        "validSourceTypes": ["spotify", "local", "other"],
+        "validSpotifyTypes": ["album", "track", "playlist"],
+        "validControlTypes": ["stop", "pause", "play", "next", "previous", "shuffle", "volumeup", "volumedown"],
+        "unusedTags": {}, "registeredTags": [], "shortTags": {}, "controlTags": {}
+    }
+    temporary = music_path + ".install-tmp"
+    with open(temporary, "w", encoding="utf-8") as output:
+        json.dump(music, output, indent=2)
+    os.replace(temporary, music_path)
+    print("No existing config/music.json found; created an empty tag library and control-tag map.")
+PY
+
 systemctl stop "${SERVICE_NAME}" >/dev/null 2>&1 || true
 systemctl stop musicdimension-receiver.path musicdimension-receiver.timer musicdimension-receiver.service >/dev/null 2>&1 || true
 echo "Migrating from Raspotify/librespot to Spotify Soloist; existing receiver caches are retained."
@@ -220,14 +287,21 @@ for old_receiver in raspotify.service librespot.service; do
         systemctl disable --now "${old_receiver}"
     fi
 done
+if [[ "${OLD_INSTALLATION_FOUND}" == true && -d "${INSTALL_DIR}" ]]; then
+    shopt -s dotglob nullglob
+    for existing in "${INSTALL_DIR}"/*; do
+        name="$(basename "${existing}")"
+        case "${name}" in
+            config|media) continue ;;
+        esac
+        rm -rf -- "${existing}"
+    done
+    shopt -u dotglob nullglob
+else
+    echo "Skipping removal: no previous application files were found."
+fi
+
 shopt -s dotglob nullglob
-for existing in "${INSTALL_DIR}"/*; do
-    name="$(basename "${existing}")"
-    case "${name}" in
-        config|media) continue ;;
-    esac
-    rm -rf -- "${existing}"
-done
 for item in "${PUBLISH_DIR}"/*; do
     name="$(basename "${item}")"
     case "${name}" in
