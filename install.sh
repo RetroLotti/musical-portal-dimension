@@ -28,13 +28,7 @@ case "${ARCHITECTURE}" in
 esac
 
 if [[ "${ARCHITECTURE}" == "armhf" && "$(uname -m)" == armv6* ]]; then
-    echo "Current Raspotify requires ARMv7 or newer. Pi 1 and original Pi Zero are not supported." >&2
-    exit 1
-fi
-
-if systemctl is-active --quiet librespot.service || systemctl is-enabled --quiet librespot.service; then
-    echo "A standalone librespot service is running or enabled. Stop/disable it before installing Raspotify:" >&2
-    echo "  sudo systemctl disable --now librespot.service" >&2
+    echo "Spotify Soloist requires ARMv7 or newer. Pi 1 and original Pi Zero are not supported." >&2
     exit 1
 fi
 
@@ -49,18 +43,13 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libvlc5 \
     libvlc-dev \
     python3 \
+    pulseaudio \
+    alsa-utils \
+    libatomic1 \
+    libnss3 \
+    libglib2.0-0 \
     tar \
     vlc-plugin-base
-
-echo "Installing Raspotify (includes librespot) from its signed APT repository..."
-install -d -m 0755 /usr/share/keyrings
-curl --fail --location --retry 3 --silent --show-error \
-    https://dtcooper.github.io/raspotify/key.asc -o /usr/share/keyrings/raspotify_key.asc
-chmod 0644 /usr/share/keyrings/raspotify_key.asc
-printf '%s\n' 'deb [signed-by=/usr/share/keyrings/raspotify_key.asc] https://dtcooper.github.io/raspotify raspotify main' \
-    > /etc/apt/sources.list.d/raspotify.list
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y raspotify avahi-daemon alsa-utils
 
 for group in plugdev audio; do
     if ! getent group "${group}" >/dev/null; then
@@ -183,7 +172,7 @@ if [[ ! -f "${SERVICE_FILE}" || ! -f "${UDEV_FILE}" ]]; then
     echo "The release is missing the Raspberry Pi service or USB rule." >&2
     exit 1
 fi
-for receiver_file in configure-receiver.py musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer raspotify-musicdimension.conf; do
+for receiver_file in configure-receiver.py update-soloist.py run-soloist.py musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
     if [[ ! -f "${PUBLISH_DIR}/deploy/raspberry-pi/${receiver_file}" ]]; then
         echo "Release lacks receiver integration (${receiver_file}). Use a release containing the new installer support." >&2
         exit 1
@@ -200,6 +189,13 @@ for data_directory in config media; do
 done
 
 systemctl stop "${SERVICE_NAME}" >/dev/null 2>&1 || true
+systemctl stop musicdimension-receiver.path musicdimension-receiver.timer musicdimension-receiver.service >/dev/null 2>&1 || true
+echo "Migrating from Raspotify/librespot to Spotify Soloist; existing receiver caches are retained."
+for old_receiver in raspotify.service librespot.service; do
+    if systemctl cat "${old_receiver}" >/dev/null 2>&1; then
+        systemctl disable --now "${old_receiver}"
+    fi
+done
 shopt -s dotglob nullglob
 for existing in "${INSTALL_DIR}"/*; do
     name="$(basename "${existing}")"
@@ -237,19 +233,19 @@ PY
 chmod 0755 "${INSTALL_DIR}/MusicDimension"
 install -m 0644 "${UDEV_FILE}" /etc/udev/rules.d/99-lego-dimensions.rules
 install -m 0644 "${SERVICE_FILE}" "/etc/systemd/system/${SERVICE_NAME}.service"
-install -d -o root -g root -m 0755 /usr/local/lib/musicdimension /etc/systemd/system/raspotify.service.d /var/lib/musicdimension-receiver
+install -d -o root -g root -m 0755 /usr/local/lib/musicdimension /etc/musicdimension-soloist /opt/musicdimension-soloist /var/lib/musicdimension-receiver
 install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/configure-receiver.py" /usr/local/lib/musicdimension/configure-receiver.py
-for unit in musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
+install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/update-soloist.py" /usr/local/lib/musicdimension/update-soloist.py
+install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/run-soloist.py" /usr/local/lib/musicdimension/run-soloist.py
+for unit in musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
     install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/${unit}" "/etc/systemd/system/${unit}"
 done
-install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/raspotify-musicdimension.conf" \
-    /etc/systemd/system/raspotify.service.d/musicdimension.conf
-install -d -m 0755 /etc/raspotify
+install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" -m 0700 /var/lib/musicdimension/soloist /var/cache/musicdimension/soloist
+/usr/bin/python3 -I /usr/local/lib/musicdimension/update-soloist.py
 
 udevadm control --reload-rules
 udevadm trigger --subsystem-match=usb
 systemctl daemon-reload
-systemctl enable --now avahi-daemon.service
 systemctl start musicdimension-receiver.service
 systemctl enable --now musicdimension-receiver.path musicdimension-receiver.timer
 systemctl enable --now "${SERVICE_NAME}"
@@ -265,6 +261,9 @@ echo "Music Dimension is installed and will start automatically at boot."
 echo "Service status: systemctl status ${SERVICE_NAME}"
 echo "Logs:           journalctl -u ${SERVICE_NAME} -f"
 echo "Web manager:    http://<pi-ip-address>:5080 (trusted LAN only; or use an SSH tunnel)."
-echo "Raspotify is installed with persistent credentials. Pair it once from Spotify on the same LAN."
-echo "Configure the receiver and connect the Spotify Web API account in the web manager's Spotify settings."
-echo "Receiver logs:  journalctl -u raspotify -f"
+echo "Spotify Soloist is installed directly from Spotify. The app checks for updated builds at every service start."
+echo "Generate your own Soloist API key at https://developer.spotify.com/dashboard/soloist and save it in Spotify settings."
+echo "Pair Soloist once from the Spotify app on the same LAN; its session is retained across updates and reboots."
+echo "The Soloist API key and the application's Web API OAuth authorization are separate."
+echo "Receiver logs:  journalctl -u musicdimension-soloist -f"
+echo "Audio logs:     journalctl -u musicdimension-audio -f"
