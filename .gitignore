@@ -367,3 +367,4 @@ FodyWeavers.xsd
 /config/config.json
 /config/tokens.json
 /config/soloist-key.json
+/config/tag-playback-state.json

@@ -5,6 +5,7 @@
     using SpotifyAPI.Web;
     using System.Diagnostics;
     using System.Net;
+    using System.Security.Cryptography;
     using System.Text;
 
     public class SpotifyHandler(Config config, SpotifyClientConfig? clientConfiguration = null, HttpClient? tokenHttpClient = null)
@@ -385,6 +386,82 @@
                 await spotify.Player.ResumePlayback(playbackRequest);
             });
         }
+
+        public async Task<SpotifyPlaybackState?> CapturePlaybackStateAsync(IReadOnlyList<Song> songs)
+        {
+            if (!IsValidSpotifyQueue(songs)) return null;
+
+            SpotifyPlaybackState? state = null;
+            await ExecuteAsync(async spotify =>
+            {
+                var deviceId = await GetDeviceIdAsync(spotify);
+                var playback = await spotify.Player.GetCurrentPlayback();
+                if (playback?.Device?.Id != deviceId || playback.Item is not FullTrack track || string.IsNullOrWhiteSpace(track.Uri)) return;
+
+                var first = songs[0];
+                if (first.SpotifyType == SpotifyTypes.Track)
+                {
+                    var index = songs.ToList().FindIndex(song => string.Equals(TrackUri(song), track.Uri, StringComparison.Ordinal));
+                    if (index < 0) return;
+                    state = new SpotifyPlaybackState(QueueSignature(songs), null, track.Uri, index, Math.Max(0, playback.ProgressMs));
+                    return;
+                }
+
+                var contextUri = ContextUri(first);
+                if (!string.Equals(playback.Context?.Uri, contextUri, StringComparison.Ordinal)) return;
+                state = new SpotifyPlaybackState(QueueSignature(songs), contextUri, track.Uri, -1, Math.Max(0, playback.ProgressMs));
+            });
+            return state;
+        }
+
+        public async Task<bool> TryResumeAsync(IReadOnlyList<Song> songs, SpotifyPlaybackState state)
+        {
+            if (!IsValidSpotifyQueue(songs)
+                || !string.Equals(state.QueueSignature, QueueSignature(songs), StringComparison.Ordinal)
+                || string.IsNullOrWhiteSpace(state.TrackUri)
+                || state.PositionMs < 0)
+                return false;
+
+            var first = songs[0];
+            var playbackRequest = new PlayerResumePlaybackRequest { PositionMs = state.PositionMs };
+            if (first.SpotifyType is SpotifyTypes.Album or SpotifyTypes.Playlist)
+            {
+                var contextUri = ContextUri(first);
+                if (!string.Equals(state.ContextUri, contextUri, StringComparison.Ordinal)
+                    || !state.TrackUri.StartsWith("spotify:track:", StringComparison.Ordinal))
+                    return false;
+                playbackRequest.ContextUri = contextUri;
+                playbackRequest.OffsetParam = new PlayerResumePlaybackRequest.Offset { Uri = state.TrackUri };
+            }
+            else
+            {
+                if (state.ContextUri != null || state.QueueIndex < 0 || state.QueueIndex >= songs.Count
+                    || !string.Equals(state.TrackUri, TrackUri(songs[state.QueueIndex]), StringComparison.Ordinal))
+                    return false;
+                playbackRequest.Uris = songs.Select(TrackUri).ToList();
+                playbackRequest.OffsetParam = new PlayerResumePlaybackRequest.Offset { Position = state.QueueIndex };
+            }
+
+            await ExecuteAsync(async spotify =>
+            {
+                playbackRequest.DeviceId = await GetDeviceIdAsync(spotify, activate: true);
+                await spotify.Player.ResumePlayback(playbackRequest);
+            });
+            return true;
+        }
+
+        private static bool IsValidSpotifyQueue(IReadOnlyList<Song> songs) =>
+            songs.Count is > 0 and <= 100
+            && songs.All(song => song.Type == SourceTypes.Spotify && song.SpotifyType != null && !string.IsNullOrWhiteSpace(song.SpotifyId))
+            && (songs.Count == 1 || songs.All(song => song.SpotifyType == SpotifyTypes.Track));
+
+        private static string TrackUri(Song song) => $"spotify:track:{song.SpotifyId!.Trim()}";
+
+        private static string ContextUri(Song song) =>
+            $"spotify:{song.SpotifyType!.Value.ToString().ToLowerInvariant()}:{song.SpotifyId!.Trim()}";
+
+        private static string QueueSignature(IReadOnlyList<Song> songs) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", songs.Select(song => $"{song.SpotifyType}:{song.SpotifyId?.Trim()}")))));
 
         public async Task WhateverAsync()
         {

@@ -12,5 +12,8 @@
 
         [JsonProperty("songs")]
         public List<Song> Songs { get; set; } = [];
+
+        [JsonProperty("resumePlayback")]
+        public bool ResumePlayback { get; set; }
     }
 }

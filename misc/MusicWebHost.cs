@@ -526,7 +526,13 @@ namespace MusicDimension.misc
                 return null;
             }
 
-            return new Tag { Uid = uid, Name = request.Name.Trim(), Songs = songs };
+            return new Tag
+            {
+                Uid = uid,
+                Name = request.Name.Trim(),
+                Songs = songs,
+                ResumePlayback = request.ResumePlayback
+            };
         }
 
         private static async Task<IResult> UploadMediaAsync(HttpRequest request, Func<int> getMaximumFileSizeMb)
@@ -632,7 +638,7 @@ namespace MusicDimension.misc
     }
 
     public sealed record CreateTagRequest(string Uid, string Name, SourceTypes Type, List<string>? Paths, SpotifyTypes? SpotifyType, string? SpotifyId,
-        List<SpotifyTagItemRequest>? SpotifyItems = null);
+        List<SpotifyTagItemRequest>? SpotifyItems = null, bool ResumePlayback = false);
 
     /// <summary>A Spotify item in a tag's saved playback order.</summary>
     public sealed record SpotifyTagItemRequest(string? Name, SpotifyTypes? SpotifyType, string? SpotifyId);

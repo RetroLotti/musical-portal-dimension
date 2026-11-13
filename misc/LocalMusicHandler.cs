@@ -1,6 +1,9 @@
 ﻿namespace MusicDimension.misc
 {
     using LibVLCSharp.Shared;
+    using MusicDimension.models;
+    using System.Security.Cryptography;
+    using System.Text;
 
     public class LocalMusicHandler
     {
@@ -12,6 +15,7 @@
         private bool _shuffle;
         private int _currentTrackIndex = -1;
         private Media? _currentMedia;
+        private long? _pendingSeekMs;
 
         public LocalMusicHandler()
         {
@@ -25,6 +29,7 @@
             Library = options.Count == 0 ? new LibVLC() : new LibVLC(options.ToArray());
             Player = new MediaPlayer(Library);
             Player.EndReached += (_, _) => _ = Task.Run(PlayNextTrack);
+            Player.Playing += (_, _) => ApplyPendingSeek();
         }
 
         public void Play(string track)
@@ -33,6 +38,11 @@
         }
 
         public void Play(IEnumerable<string> tracksToPlay)
+        {
+            Play(tracksToPlay, null);
+        }
+
+        public bool Play(IEnumerable<string> tracksToPlay, LocalPlaybackState? resumeState)
         {
             var tracks = tracksToPlay.SelectMany(track => Path.GetExtension(track).ToLowerInvariant() switch
             {
@@ -44,12 +54,45 @@
             lock (_playlistLock)
             {
                 Player.Stop();
+                _pendingSeekMs = null;
                 _tracks = tracks;
                 var order = Enumerable.Range(0, tracks.Count).ToArray();
-                if (_shuffle) Random.Shared.Shuffle(order);
-                _playOrder = order.ToList();
-                _currentTrackIndex = 0;
+                var restored = resumeState != null
+                    && string.Equals(resumeState.QueueSignature, QueueSignature(tracks), StringComparison.Ordinal)
+                    && IsValidPlayOrder(resumeState.PlayOrder, tracks.Count)
+                    && resumeState.TrackIndex >= 0
+                    && resumeState.TrackIndex < tracks.Count
+                    && resumeState.PlayOrder.Contains(resumeState.TrackIndex);
+                if (restored)
+                {
+                    _playOrder = resumeState!.PlayOrder.ToList();
+                    _currentTrackIndex = _playOrder.IndexOf(resumeState.TrackIndex);
+                    _shuffle = resumeState.Shuffle;
+                    _pendingSeekMs = Math.Max(0, resumeState.PositionMs);
+                }
+                else
+                {
+                    if (_shuffle) Random.Shared.Shuffle(order);
+                    _playOrder = order.ToList();
+                    _currentTrackIndex = 0;
+                }
                 PlayCurrentTrack();
+                return restored;
+            }
+        }
+
+        public LocalPlaybackState? CapturePlaybackState()
+        {
+            lock (_playlistLock)
+            {
+                if (_currentTrackIndex < 0 || _currentTrackIndex >= _playOrder.Count) return null;
+
+                return new LocalPlaybackState(
+                    QueueSignature(_tracks),
+                    _playOrder[_currentTrackIndex],
+                    Math.Max(0, Player.Time),
+                    _playOrder.ToArray(),
+                    _shuffle);
             }
         }
 
@@ -61,6 +104,7 @@
                 _tracks = [];
                 _playOrder = [];
                 _currentTrackIndex = -1;
+                _pendingSeekMs = null;
                 _currentMedia?.Dispose();
                 _currentMedia = null;
             }
@@ -187,6 +231,25 @@
             _currentMedia = new Media(Library, _tracks[_playOrder[_currentTrackIndex]], FromType.FromPath);
             Player.Play(_currentMedia);
         }
+
+        private void ApplyPendingSeek()
+        {
+            lock (_playlistLock)
+            {
+                if (_pendingSeekMs is not long position) return;
+                if (Player.Length > 0) position = Math.Min(position, Math.Max(0, Player.Length - 1000));
+                Player.Time = position;
+                _pendingSeekMs = null;
+            }
+        }
+
+        private static bool IsValidPlayOrder(IReadOnlyCollection<int> playOrder, int trackCount) =>
+            playOrder.Count == trackCount
+            && playOrder.Distinct().Count() == trackCount
+            && playOrder.All(index => index >= 0 && index < trackCount);
+
+        private static string QueueSignature(IEnumerable<string> tracks) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", tracks))));
 
         private void PlayNextTrack()
         {

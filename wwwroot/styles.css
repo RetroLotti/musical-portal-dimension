@@ -120,6 +120,8 @@ h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23px;
 #mediaSettingsMessage { overflow-wrap: anywhere; }
 .library-section, .editor-section { min-width: 0; padding: 28px 30px 32px; }
 .library-section { border-right: 1px solid var(--line); }
+.resume-option { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; color: #34443e; font-size: 12px; }
+.resume-option input { width: 17px; height: 17px; flex: 0 0 auto; accent-color: var(--forest-light); }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
 .count { display: inline-grid; min-width: 25px; height: 25px; place-items: center; margin-left: 5px; border-radius: 50%; color: var(--forest); background: #e8f1da; font: 700 11px "Trebuchet MS", sans-serif; vertical-align: 3px; }
 .search-box { display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: #fafbf7; }

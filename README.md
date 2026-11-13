@@ -1,19 +1,22 @@
 # MusicDimension
-A personal creation in order to play music from Spotify via a Raspberry Pi. a practical and solution and also for fun and curiosity. 
+A personal creation in order to play music from Spotify via a Raspberry Pi. Main reason is fun and curiosity.
+Also now with improved functionality thanks to AI.
 
-Steps in order to get things started: 
-- install Raspberry Pi OS via Raspberry Pi Imager
-![image](https://github.com/user-attachments/assets/0caa167a-4c3f-4eee-9cff-778317b3828f)
+<img width="1254" height="1254" alt="image" src="https://github.com/user-attachments/assets/c15ef1e7-773c-48b2-94f7-30dc540f4147" />
 
+## Installation
+I am using my Raspberry Pi 3 Model B. No other model has been tested.
+
+- install Raspberry Pi OS (Trixie) via Raspberry Pi Imager
 - connect via SSH and run `sudo bash install.sh`; this installs MusicDimension, official Spotify Soloist, a private audio server, USB dependencies, and boot services
 - create app in [spotify developer dashboard](https://developer.spotify.com/dashboard)
 
 - configure Spotify and the receiver through the web manager's **Spotify settings** tab
-- generate your personal [Soloist API key](https://developer.spotify.com/dashboard/soloist), save it in Spotify settings, and pair the receiver once in the Spotify app on the same LAN
+- generate your personal [Soloist API key](https://developer.spotify.com/dashboard/soloist), save it in Spotify settings, and pair the receiver once in the Spotify app on the same (W)LAN
 - connect Lego dimensions portal
 - start musical dimension
 
-## Raspberry Pi 3 Model B
+## Additional Notes
 
 The Pi 3 Model B can run either 32-bit ARM (`linux-arm`) or 64-bit ARM (`linux-arm64`). Raspberry Pi OS 64-bit is recommended; the application cross-publishes successfully for both targets. The deployment is self-contained, but VLC and libusb must be installed from Raspberry Pi OS because this project does not bundle Linux VLC libraries.
 
@@ -59,6 +62,8 @@ In **Playback controls → Upload limit**, set the maximum size for each local m
 In **Playback controls**, scan or enter a different UID for each action, then click **Save controls**. Leave a field blank to remove its assignment. Forward/rewind, **Volume up**, **Volume down**, and **Toggle shuffle** work with both local and Spotify playback. Volume changes by 10 percentage points per presentation and is limited to 0–100. Spotify volume control requires the configured device to expose its current playback volume; another active device is never controlled instead.
 
 Shuffle is a toggle. For local queues it randomizes the unplayed tracks without interrupting the current track or repeating already played entries; turning it off restores the remaining tracks' saved order. If local shuffle is still enabled when another tag starts, its queue starts shuffled. Spotify shuffle toggles the configured device's current shuffle state. Control tags can also operate on a paused music tag without losing its resume state. Shuffle state is a playback setting, not a rewrite of the tag's saved track list.
+
+For audiobook-style tags, enable **Resume playback where I left off** while creating or editing the tag. Removing the tag saves its current track and position; reading it again resumes there, including within local M3U playlists and Spotify track queues, albums, and playlists. Positions are stored per tag in `config/tag-playback-state.json` and survive application restarts. If a saved queue changes, its old position is discarded.
 
 ### Spotify Settings And Login
 

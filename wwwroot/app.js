@@ -67,7 +67,7 @@ function renderTags() {
     name.textContent = tag.name || "Unnamed tag";
     const detail = document.createElement("p");
     detail.className = "tag-detail";
-    detail.textContent = `${tag.uid} · ${(tag.songs ?? []).map(song => song.name || song.path || song.spotifyId || song.type).join(", ")}`;
+    detail.textContent = `${tag.uid} · ${tag.resumePlayback ? "Resume enabled · " : ""}${(tag.songs ?? []).map(song => song.name || song.path || song.spotifyId || song.type).join(", ")}`;
     info.append(name, detail);
 
     const kind = document.createElement("span");
@@ -286,6 +286,7 @@ async function editTag(tag) {
   document.querySelector("#uidInput").value = tag.uid;
   document.querySelector("#uidInput").readOnly = true;
   document.querySelector("#nameInput").value = tag.name ?? "";
+  document.querySelector("#resumePlayback").checked = Boolean(tag.resumePlayback);
   sourceSelect.value = source;
   document.querySelector("#spotifyType").value = songs[0]?.spotifyType ?? "track";
   document.querySelector("#spotifyId").value = "";
@@ -648,7 +649,8 @@ async function createTag(event) {
     paths: source === "local" ? uploadQueue.map(file => file.path) : [],
     spotifyType: source === "spotify" ? document.querySelector("#spotifyType").value : null,
     spotifyId: null,
-    spotifyItems: source === "spotify" ? spotifyQueue.map(item => ({ name: item.name, spotifyType: item.spotifyType, spotifyId: item.spotifyId })) : null
+    spotifyItems: source === "spotify" ? spotifyQueue.map(item => ({ name: item.name, spotifyType: item.spotifyType, spotifyId: item.spotifyId })) : null,
+    resumePlayback: document.querySelector("#resumePlayback").checked
   };
 
   if (source === "local" && uploadQueue.length === 0) {
