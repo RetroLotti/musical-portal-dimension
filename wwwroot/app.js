@@ -21,6 +21,8 @@ let queueDrag;
 let queueUid = null;
 let editingUid = null;
 let spotifyEnabled = false;
+let bluetoothDevices = [];
+let bluetoothManaged = false;
 let mediaMaxFileSizeMb = 512;
 let selectedMediaPaths = new Set();
 let toastTimer;
@@ -39,6 +41,35 @@ function showToast(message) {
   toast.classList.add("is-visible");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2800);
+}
+
+function audioOutputName(value) {
+  if (!value || value === "headphones") return "Pi headphone jack";
+  const address = value.replace(/^bluetooth:/i, "");
+  return bluetoothDevices.find(device => device.address.toLowerCase() === address.toLowerCase())?.name || `Bluetooth ${address}`;
+}
+
+function renderAudioOutputOptions(selected = document.querySelector("#audioOutput").value) {
+  const picker = document.querySelector("#audioOutput");
+  const options = [new Option("Pi headphone jack", "headphones")];
+  for (const device of bluetoothDevices.filter(item => item.paired)) {
+    options.push(new Option(`${device.name}${device.connected ? " (connected)" : ""}`, `bluetooth:${device.address}`));
+  }
+  if (selected !== "headphones" && !options.some(option => option.value === selected))
+    options.push(new Option(`${audioOutputName(selected)} (not connected)`, selected));
+  picker.replaceChildren(...options);
+  picker.value = selected || "headphones";
+}
+
+function renderBluetoothDevicePicker(devices) {
+  const picker = document.querySelector("#bluetoothDevicePicker");
+  const options = [new Option(devices.length ? "Choose a device" : "No devices found", "")];
+  for (const device of devices) {
+    options.push(new Option(`${device.name} - ${device.address}${device.connected ? " (connected)" : device.paired ? " (paired)" : ""}`, device.address));
+  }
+  picker.replaceChildren(...options);
+  picker.disabled = !bluetoothManaged || devices.length === 0;
+  document.querySelector("#connectBluetoothButton").disabled = !bluetoothManaged || !picker.value;
 }
 
 function renderTags() {
@@ -67,7 +98,7 @@ function renderTags() {
     name.textContent = tag.name || "Unnamed tag";
     const detail = document.createElement("p");
     detail.className = "tag-detail";
-    detail.textContent = `${tag.uid} · ${tag.resumePlayback ? "Resume enabled · " : ""}${(tag.songs ?? []).map(song => song.name || song.path || song.spotifyId || song.type).join(", ")}`;
+    detail.textContent = `${tag.uid} · ${audioOutputName(tag.audioOutput)} · ${tag.resumePlayback ? "Resume enabled · " : ""}${(tag.songs ?? []).map(song => song.name || song.path || song.spotifyId || song.type).join(", ")}`;
     info.append(name, detail);
 
     const kind = document.createElement("span");
@@ -115,6 +146,7 @@ async function refresh() {
   ]);
   library = nextLibrary;
   spotifyEnabled = status.spotifyEnabled;
+  await loadBluetoothStatus();
   document.querySelector("#forwardUid").value = configuredControlUid("next");
   document.querySelector("#rewindUid").value = configuredControlUid("previous");
   document.querySelector("#volumeUpUid").value = configuredControlUid("volumeup");
@@ -287,6 +319,7 @@ async function editTag(tag) {
   document.querySelector("#uidInput").readOnly = true;
   document.querySelector("#nameInput").value = tag.name ?? "";
   document.querySelector("#resumePlayback").checked = Boolean(tag.resumePlayback);
+  renderAudioOutputOptions(tag.audioOutput ?? "headphones");
   sourceSelect.value = source;
   document.querySelector("#spotifyType").value = songs[0]?.spotifyType ?? "track";
   document.querySelector("#spotifyId").value = "";
@@ -333,6 +366,7 @@ function cancelEdit() {
   uploadQueue = [];
   spotifyQueue = [];
   document.querySelector("#tagForm").reset();
+  renderAudioOutputOptions("headphones");
   document.querySelector("#uidInput").readOnly = false;
   document.querySelector("#editorTitle").textContent = "Register a tag";
   document.querySelector("#saveLabel").textContent = "Add tag";
@@ -650,7 +684,8 @@ async function createTag(event) {
     spotifyType: source === "spotify" ? document.querySelector("#spotifyType").value : null,
     spotifyId: null,
     spotifyItems: source === "spotify" ? spotifyQueue.map(item => ({ name: item.name, spotifyType: item.spotifyType, spotifyId: item.spotifyId })) : null,
-    resumePlayback: document.querySelector("#resumePlayback").checked
+    resumePlayback: document.querySelector("#resumePlayback").checked,
+    audioOutput: document.querySelector("#audioOutput").value
   };
 
   if (source === "local" && uploadQueue.length === 0) {
@@ -707,6 +742,66 @@ async function loadReceiverStatus() {
   const update = status.update ? ` Update: ${status.update.state}${status.update.version ? ` (${status.update.version})` : ""}.${status.update.error ? ` ${status.update.error}` : ""}` : "";
   message.textContent = status.error ?? `Soloist: ${status.activeState}${name}${audio}. ${login}${update}`;
 }
+
+async function loadBluetoothStatus() {
+  const status = await request("/api/audio/bluetooth");
+  bluetoothManaged = status.managed;
+  bluetoothDevices = status.devices ?? [];
+  renderBluetoothDevicePicker(bluetoothDevices);
+  renderAudioOutputOptions();
+  document.querySelector("#bluetoothMessage").textContent = status.message ?? "";
+  document.querySelector("#scanBluetoothButton").disabled = !bluetoothManaged || status.state === "running";
+}
+
+async function runBluetoothOperation(operation) {
+  const scanButton = document.querySelector("#scanBluetoothButton");
+  const connectButton = document.querySelector("#connectBluetoothButton");
+  const message = document.querySelector("#bluetoothMessage");
+  scanButton.disabled = true;
+  connectButton.disabled = true;
+  message.classList.remove("error");
+  message.textContent = operation === "scan" ? "Scanning for nearby devices..." : "Pairing and connecting...";
+  try {
+    const address = document.querySelector("#bluetoothDevicePicker").value;
+    const result = await request(`/api/audio/bluetooth/${operation}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      ...(operation === "connect" ? { body: JSON.stringify({ address }) } : {})
+    });
+    for (let attempt = 0; attempt < 55; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const status = await request("/api/audio/bluetooth");
+      if (status.requestId !== result.requestId) continue;
+      bluetoothDevices = status.devices ?? [];
+      renderBluetoothDevicePicker(bluetoothDevices);
+      renderAudioOutputOptions();
+      if (status.state === "error") throw new Error(status.message || "Bluetooth setup failed.");
+      if (status.state === "complete") {
+        message.textContent = status.message || "Bluetooth setup complete.";
+        if (bluetoothDevices.length) {
+          const preferred = operation === "connect" ? address : bluetoothDevices[0].address;
+          document.querySelector("#bluetoothDevicePicker").value = bluetoothDevices.some(device => device.address === preferred)
+            ? preferred : bluetoothDevices[0].address;
+          connectButton.disabled = !bluetoothManaged || !document.querySelector("#bluetoothDevicePicker").value;
+        }
+        return;
+      }
+    }
+    throw new Error("Bluetooth setup is taking longer than expected. Refresh status before trying again.");
+  } catch (error) {
+    message.classList.add("error");
+    message.textContent = error.message;
+  } finally {
+    scanButton.disabled = !bluetoothManaged;
+    connectButton.disabled = !bluetoothManaged || !document.querySelector("#bluetoothDevicePicker").value;
+  }
+}
+
+document.querySelector("#scanBluetoothButton").addEventListener("click", () => runBluetoothOperation("scan"));
+document.querySelector("#connectBluetoothButton").addEventListener("click", () => runBluetoothOperation("connect"));
+document.querySelector("#bluetoothDevicePicker").addEventListener("change", event => {
+  document.querySelector("#connectBluetoothButton").disabled = !bluetoothManaged || !event.target.value;
+});
 
 document.querySelector("#refreshReceiverStatus").addEventListener("click", async event => {
   const button = event.currentTarget;

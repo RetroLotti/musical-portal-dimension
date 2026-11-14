@@ -75,6 +75,7 @@ def apply_settings():
         ".fail",
         "load-module module-native-protocol-unix socket=/run/musicdimension-audio/native",
         "load-module module-alsa-sink device=" + device + " sink_name=musicdimension",
+        "load-module module-bluetooth-discover",
         "set-default-sink musicdimension",
         "load-module module-suspend-on-idle timeout=5",
         "",
@@ -86,15 +87,16 @@ def apply_settings():
     if audio_changed:
         atomic_write(AUDIO, audio, 0o644)
     set_runtime_owner()
+    systemctl("enable", "musicdimension-audio.service")
+    systemctl("restart" if audio_changed else "start", "musicdimension-audio.service")
     if enabled and key:
-        systemctl("enable", "musicdimension-audio.service", "musicdimension-soloist.service")
-        systemctl("restart" if audio_changed else "start", "musicdimension-audio.service")
+        systemctl("enable", "musicdimension-soloist.service")
         if changed or audio_changed:
             systemctl("restart", "musicdimension-soloist.service")
         else:
             systemctl("start", "musicdimension-soloist.service")
     else:
-        systemctl("disable", "--now", "musicdimension-soloist.service", "musicdimension-audio.service")
+        systemctl("disable", "--now", "musicdimension-soloist.service")
     active = systemctl("is-active", "musicdimension-soloist.service", check=False).stdout.strip()
     try:
         update = json.loads(UPDATE.read_text())

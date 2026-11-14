@@ -1,6 +1,7 @@
 [Unit]
 Description=Private audio server for Music Dimension Soloist
-After=sound.target
+Wants=bluetooth.service
+After=sound.target bluetooth.service
 
 [Service]
 Type=simple

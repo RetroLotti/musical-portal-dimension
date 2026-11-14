@@ -1,7 +1,7 @@
 [Unit]
 Description=Music Dimension NFC music player
-Wants=network-online.target
-After=network-online.target sound.target
+Wants=network-online.target musicdimension-audio.service
+After=network-online.target sound.target musicdimension-audio.service
 
 [Service]
 Type=simple
@@ -11,8 +11,8 @@ SupplementaryGroups=plugdev audio
 WorkingDirectory=/opt/musicdimension
 Environment=HOME=/var/lib/musicdimension
 Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/cache/musicdimension
-Environment=MUSICDIMENSION_AUDIO_OUTPUT=alsa
-Environment=MUSICDIMENSION_ALSA_DEVICE=plughw:CARD=Headphones,DEV=0
+Environment=PULSE_SERVER=unix:/run/musicdimension-audio/native
+Environment=MUSICDIMENSION_AUDIO_OUTPUT=pulse
 Environment=MUSICDIMENSION_WEB_URL=http://0.0.0.0:5080
 ExecStartPre=+/usr/bin/python3 -I /usr/local/lib/musicdimension/update-soloist.py --startup
 ExecStart=/opt/musicdimension/MusicDimension

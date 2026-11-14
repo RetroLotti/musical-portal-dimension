@@ -1,0 +1,15 @@
+[Unit]
+Description=Pair Music Dimension Bluetooth audio devices
+After=bluetooth.service musicdimension-audio.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/musicdimension/configure-bluetooth.py
+StateDirectory=musicdimension-receiver
+StateDirectoryMode=0755
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/musicdimension-receiver /var/lib/bluetooth /run/dbus/system_bus_socket
+TimeoutStartSec=60

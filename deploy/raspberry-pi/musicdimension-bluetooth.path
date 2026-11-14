@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch Music Dimension Bluetooth requests
+
+[Path]
+PathChanged=/var/lib/musicdimension-receiver/requests/bluetooth-request.json
+Unit=musicdimension-bluetooth.service
+
+[Install]
+WantedBy=multi-user.target

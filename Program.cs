@@ -159,6 +159,9 @@
             {
                 if (string.Equals(uid, _pausedTagUid, StringComparison.OrdinalIgnoreCase))
                 {
+                    var pausedTag = _musicStore.Snapshot().RegisteredTags
+                        .FirstOrDefault(item => string.Equals(item.Uid, uid, StringComparison.OrdinalIgnoreCase));
+                    if (pausedTag != null) await SelectTagOutputAsync(pausedTag);
                     if (_pausedPlaybackSource == SourceTypes.Spotify && !_spotifyHandler.Configuration.Enable)
                     {
                         Console.WriteLine("Spotify is disabled; this tag cannot be resumed.");
@@ -166,8 +169,6 @@
                     }
                     if (_pausedPlaybackSource == SourceTypes.Spotify)
                     {
-                        var pausedTag = _musicStore.Snapshot().RegisteredTags
-                            .FirstOrDefault(item => string.Equals(item.Uid, uid, StringComparison.OrdinalIgnoreCase));
                         var savedState = pausedTag?.ResumePlayback == true ? _tagPlaybackStore.GetSpotify(uid) : null;
                         if (pausedTag?.ResumePlayback == true && savedState != null)
                         {
@@ -249,6 +250,7 @@
             var song = songs[0];
 
             await SaveCurrentTagPlaybackStateAsync();
+            if (tag != null) await SelectTagOutputAsync(tag);
 
             // TODO: get current player info - if current song or album are the same as the requested one the playback should not be reset
 
@@ -411,6 +413,19 @@
             {
                 Console.WriteLine($"Could not save playback position for tag {_currentTagUid}: {exception.Message}");
             }
+        }
+
+        private static async Task SelectTagOutputAsync(Tag tag)
+        {
+            if (tag.AudioOutput.StartsWith("bluetooth:", StringComparison.OrdinalIgnoreCase)
+                && !await BluetoothManager.EnsureConnectedAsync(tag.AudioOutput[10..]))
+            {
+                Console.WriteLine($"Bluetooth output for tag {tag.Uid} is unavailable; using the headphone output.");
+                await AudioOutputController.SelectAsync("headphones");
+                return;
+            }
+            if (!await AudioOutputController.SelectAsync(tag.AudioOutput))
+                Console.WriteLine($"Bluetooth output for tag {tag.Uid} is unavailable; using the headphone output.");
         }
 
         private static void RemoveSavedTagPlaybackState(string uid)
