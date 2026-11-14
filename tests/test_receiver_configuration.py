@@ -166,6 +166,13 @@ class ReceiverConfigurationTests(unittest.TestCase):
         installer = (ROOT / "install.sh").read_text()
         self.assertIn("pulseaudio-module-bluetooth", installer)
         self.assertIn("musicdimension-bluetooth.path", installer)
+        self.assertIn("vlc-plugin-base", installer)
+        self.assertNotIn("vlc-plugin-pulse", installer)
+        self.assertIn("read-service-logs.py", installer)
+        self.assertIn("musicdimension-logs.path", installer)
+        log_unit = (ROOT / "deploy/raspberry-pi/musicdimension-logs.service").read_text()
+        self.assertIn("read-service-logs.py", log_unit)
+        self.assertIn("NoNewPrivileges=true", log_unit)
 
     def test_invalid_key_rejected(self):
         for key in ("private\nkey", "x" * 4097, {"unexpected": "object"}):

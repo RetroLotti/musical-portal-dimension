@@ -70,6 +70,13 @@ namespace MusicDimension.misc
             app.MapPost("/api/audio/bluetooth/scan", (HttpContext context) => StartBluetoothOperation(context, "scan"));
             app.MapPost("/api/audio/bluetooth/connect", (BluetoothConnectRequest request, HttpContext context) =>
                 StartBluetoothOperation(context, "connect", request.Address));
+            app.MapGet("/api/service-logs", (HttpContext context) =>
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                return Results.Ok(ServiceLogsManager.GetStatus());
+            });
+            app.MapPost("/api/service-logs/{service}", (string service, ServiceLogsRequest request, HttpContext context) =>
+                StartServiceLogRequest(context, service, request.Lines));
             app.MapGet("/api/spotify/devices", async (HttpContext context, CancellationToken cancellationToken) =>
             {
                 context.Response.Headers.CacheControl = "no-store";
@@ -202,6 +209,33 @@ namespace MusicDimension.misc
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
                 return Results.Problem("Could not queue Bluetooth setup. Check that the updated Pi installer is installed.");
+            }
+        }
+
+        private static IResult StartServiceLogRequest(HttpContext context, string service, int lines)
+        {
+            var origin = context.Request.Headers.Origin.ToString();
+            if (context.Request.Headers["Sec-Fetch-Site"] == "cross-site"
+                || (!string.IsNullOrEmpty(origin) && (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri)
+                    || Uri.Compare(originUri, new Uri($"{context.Request.Scheme}://{context.Request.Host}"),
+                        UriComponents.SchemeAndServer, UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)))
+                return Results.Json(new { message = "Read service logs from this web manager." }, statusCode: StatusCodes.Status403Forbidden);
+
+            try
+            {
+                return Results.Accepted(value: new { requestId = ServiceLogsManager.StartRequest(service, lines) });
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { message = exception.Message });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { message = exception.Message });
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return Results.Problem("Could not queue the service log request. Check that the updated Pi installer is installed.");
             }
         }
 

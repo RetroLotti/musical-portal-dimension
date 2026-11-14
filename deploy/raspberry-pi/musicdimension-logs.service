@@ -1,0 +1,15 @@
+[Unit]
+Description=Read allow-listed Music Dimension service logs
+After=systemd-journald.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/musicdimension/read-service-logs.py
+StateDirectory=musicdimension-receiver
+StateDirectoryMode=0755
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/musicdimension-receiver
+TimeoutStartSec=20

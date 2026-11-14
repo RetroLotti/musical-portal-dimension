@@ -797,8 +797,45 @@ async function runBluetoothOperation(operation) {
   }
 }
 
+async function loadServiceLogs() {
+  const button = document.querySelector("#loadServiceLogsButton");
+  const message = document.querySelector("#serviceLogsMessage");
+  const output = document.querySelector("#serviceLogsOutput");
+  const service = document.querySelector("#logService").value;
+  const lines = Number(document.querySelector("#logLineCount").value);
+  button.disabled = true;
+  message.classList.remove("error");
+  message.textContent = "Loading service logs...";
+  try {
+    const requestInfo = await request(`/api/service-logs/${encodeURIComponent(service)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines })
+    });
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const status = await request("/api/service-logs");
+      if (status.requestId !== requestInfo.requestId) continue;
+      if (status.state === "error") throw new Error(status.message || "Could not read service logs.");
+      if (status.state === "complete") {
+        output.textContent = status.logs || "No recent log entries.";
+        message.textContent = `${status.service} · latest ${status.lines} lines`;
+        output.scrollTop = output.scrollHeight;
+        return;
+      }
+    }
+    throw new Error("Log request timed out. Try again.");
+  } catch (error) {
+    message.classList.add("error");
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 document.querySelector("#scanBluetoothButton").addEventListener("click", () => runBluetoothOperation("scan"));
 document.querySelector("#connectBluetoothButton").addEventListener("click", () => runBluetoothOperation("connect"));
+document.querySelector("#loadServiceLogsButton").addEventListener("click", loadServiceLogs);
 document.querySelector("#bluetoothDevicePicker").addEventListener("change", event => {
   document.querySelector("#connectBluetoothButton").disabled = !bluetoothManaged || !event.target.value;
 });

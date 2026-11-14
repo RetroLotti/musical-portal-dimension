@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch Music Dimension service log requests
+
+[Path]
+PathChanged=/var/lib/musicdimension-receiver/requests/log-request.json
+Unit=musicdimension-logs.service
+
+[Install]
+WantedBy=multi-user.target

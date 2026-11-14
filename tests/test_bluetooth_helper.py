@@ -48,16 +48,36 @@ class BluetoothHelperTests(unittest.TestCase):
         run = command.start()
         self.addCleanup(command.stop)
         run.side_effect = [
+            subprocess.CompletedProcess([], 0, "Controller 00:11:22:33:44:55 [default]\n\tPowered: yes\n", ""),
+            subprocess.CompletedProcess([], 0, "[NEW] Device AA:BB:CC:DD:EE:FF Speaker\n", ""),
             subprocess.CompletedProcess([], 0, "", ""),
-            subprocess.CompletedProcess([], 0, "", ""),
-            subprocess.CompletedProcess([], 0, "", ""),
-            subprocess.CompletedProcess([], 0, "Device AA:BB:CC:DD:EE:FF Speaker", ""),
             subprocess.CompletedProcess([], 0, "Alias: Speaker\nPaired: yes\nConnected: no\n", ""),
         ]
         bluetooth.main()
         status = json.loads(self.status.read_text())
         self.assertEqual(status["state"], "complete")
         self.assertEqual(status["devices"], [{"address": "AA:BB:CC:DD:EE:FF", "name": "Speaker", "paired": True, "connected": False}])
+
+    def test_scan_reports_missing_controller(self):
+        self.request.write_text(json.dumps({"requestId": "a5", "operation": "scan"}))
+        with patch.object(bluetooth, "run_bluetoothctl", return_value=subprocess.CompletedProcess([], 1, "No default controller available", "")):
+            bluetooth.main()
+        status = json.loads(self.status.read_text())
+        self.assertEqual(status["state"], "error")
+        self.assertIn("No Bluetooth controller is available", status["message"])
+
+    def test_empty_scan_reports_pairing_mode_guidance(self):
+        self.request.write_text(json.dumps({"requestId": "a6", "operation": "scan"}))
+        with patch.object(bluetooth, "run_bluetoothctl", side_effect=[
+            subprocess.CompletedProcess([], 0, "Controller 00:11:22:33:44:55 [default]\n\tPowered: yes\n", ""),
+            subprocess.CompletedProcess([], 0, "Discovery started\n", ""),
+            subprocess.CompletedProcess([], 0, "", ""),
+        ]):
+            bluetooth.main()
+        status = json.loads(self.status.read_text())
+        self.assertEqual(status["state"], "complete")
+        self.assertEqual(status["devices"], [])
+        self.assertIn("Put the speaker in pairing mode", status["message"])
 
     def test_failed_pairing_is_reported_without_echoing_request_data(self):
         self.request.write_text(json.dumps({"requestId": "a3", "operation": "connect", "address": "AA:BB:CC:DD:EE:FF"}))
