@@ -62,6 +62,14 @@ namespace MusicDimension.misc
                 context.Response.Headers.CacheControl = "no-store";
                 return Results.Ok(await GetReceiverStatusAsync(cancellationToken));
             });
+            app.MapGet("/api/audio/bluetooth", (HttpContext context) =>
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                return Results.Ok(BluetoothManager.GetStatus());
+            });
+            app.MapPost("/api/audio/bluetooth/scan", (HttpContext context) => StartBluetoothOperation(context, "scan"));
+            app.MapPost("/api/audio/bluetooth/connect", (BluetoothConnectRequest request, HttpContext context) =>
+                StartBluetoothOperation(context, "connect", request.Address));
             app.MapGet("/api/spotify/devices", async (HttpContext context, CancellationToken cancellationToken) =>
             {
                 context.Response.Headers.CacheControl = "no-store";
@@ -168,6 +176,33 @@ namespace MusicDimension.misc
             return new(configuration.Enable, configuration.ClientId, configuration.SpotifyDeviceName,
                 !string.IsNullOrEmpty(configuration.ClientSecret), new ReceiverSettingsResponse(configuration.Receiver.Enabled,
                     configuration.Receiver.AudioDevice, configuration.Receiver.Bitrate, spotify.HasSoloistApiKey));
+        }
+
+        private static IResult StartBluetoothOperation(HttpContext context, string operation, string? address = null)
+        {
+            var origin = context.Request.Headers.Origin.ToString();
+            if (context.Request.Headers["Sec-Fetch-Site"] == "cross-site"
+                || (!string.IsNullOrEmpty(origin) && (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri)
+                    || Uri.Compare(originUri, new Uri($"{context.Request.Scheme}://{context.Request.Host}"),
+                        UriComponents.SchemeAndServer, UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)))
+                return Results.Json(new { message = "Start Bluetooth setup from this web manager." }, statusCode: StatusCodes.Status403Forbidden);
+
+            try
+            {
+                return Results.Accepted(value: new { requestId = BluetoothManager.StartOperation(operation, address) });
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { message = exception.Message });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { message = exception.Message });
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return Results.Problem("Could not queue Bluetooth setup. Check that the updated Pi installer is installed.");
+            }
         }
 
         private static async Task<ReceiverStatusResponse> GetReceiverStatusAsync(CancellationToken cancellationToken)
@@ -451,6 +486,16 @@ namespace MusicDimension.misc
             }
 
             var songs = new List<Song>();
+            var audioOutput = request.AudioOutput?.Trim() ?? "headphones";
+            if (!string.Equals(audioOutput, "headphones", StringComparison.OrdinalIgnoreCase)
+                && !Regex.IsMatch(audioOutput, @"\Abluetooth:(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\Z"))
+            {
+                error = "Choose Headphones or a valid paired Bluetooth device.";
+                return null;
+            }
+            if (audioOutput.StartsWith("bluetooth:", StringComparison.OrdinalIgnoreCase))
+                audioOutput = "bluetooth:" + audioOutput[10..].ToUpperInvariant();
+
             if (request.Type == SourceTypes.Local)
             {
                 if (request.Paths == null || request.Paths.Count == 0)
@@ -531,7 +576,8 @@ namespace MusicDimension.misc
                 Uid = uid,
                 Name = request.Name.Trim(),
                 Songs = songs,
-                ResumePlayback = request.ResumePlayback
+                ResumePlayback = request.ResumePlayback,
+                AudioOutput = audioOutput
             };
         }
 
@@ -638,7 +684,7 @@ namespace MusicDimension.misc
     }
 
     public sealed record CreateTagRequest(string Uid, string Name, SourceTypes Type, List<string>? Paths, SpotifyTypes? SpotifyType, string? SpotifyId,
-        List<SpotifyTagItemRequest>? SpotifyItems = null, bool ResumePlayback = false);
+        List<SpotifyTagItemRequest>? SpotifyItems = null, bool ResumePlayback = false, string? AudioOutput = null);
 
     /// <summary>A Spotify item in a tag's saved playback order.</summary>
     public sealed record SpotifyTagItemRequest(string? Name, SpotifyTypes? SpotifyType, string? SpotifyId);

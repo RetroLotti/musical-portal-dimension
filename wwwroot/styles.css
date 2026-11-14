@@ -94,6 +94,11 @@ h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23px;
 .receiver-settings legend { padding: 0 8px 0 0; font-size: 13px; font-weight: 700; }
 .receiver-status-row { display: grid; grid-template-columns: minmax(0, 1fr) 42px; align-items: center; gap: 12px; }
 .receiver-settings:disabled { opacity: .6; }
+.bluetooth-tools { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+.bluetooth-tools > label { color: #34443e; font-size: 11px; font-weight: 700; }
+.bluetooth-actions { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
+.bluetooth-actions .button { min-height: 40px; padding-inline: 11px; }
+.bluetooth-tools .form-message { overflow-wrap: anywhere; }
 .spotify-device-name-row { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 8px; }
 #spotifyAvailableDevices[hidden], #spotifyDevicesLabel[hidden] { display: none; }
 #loadSpotifyDevicesButton:disabled { opacity: .6; cursor: wait; }

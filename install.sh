@@ -44,7 +44,11 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libvlc-dev \
     python3 \
     pulseaudio \
+    pulseaudio-module-bluetooth \
+    pulseaudio-utils \
+    bluez \
     alsa-utils \
+    vlc-plugin-pulse \
     libatomic1 \
     libnss3 \
     libglib2.0-0 \
@@ -175,7 +179,7 @@ if [[ ! -f "${SERVICE_FILE}" || ! -f "${UDEV_FILE}" ]]; then
     echo "The release is missing the Raspberry Pi service or USB rule." >&2
     exit 1
 fi
-for receiver_file in configure-receiver.py update-soloist.py run-soloist.py musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
+for receiver_file in configure-receiver.py configure-bluetooth.py update-soloist.py run-soloist.py musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer musicdimension-bluetooth.service musicdimension-bluetooth.path; do
     if [[ ! -f "${PUBLISH_DIR}/deploy/raspberry-pi/${receiver_file}" ]]; then
         if [[ -n "${ASSET_URL}" && "${VERSION}" == "latest" ]]; then
             echo "The latest GitHub release is missing Soloist support (${receiver_file}); building current source instead."
@@ -187,7 +191,7 @@ for receiver_file in configure-receiver.py update-soloist.py run-soloist.py musi
     fi
 done
 
-for receiver_file in configure-receiver.py update-soloist.py run-soloist.py musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
+for receiver_file in configure-receiver.py configure-bluetooth.py update-soloist.py run-soloist.py musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer musicdimension-bluetooth.service musicdimension-bluetooth.path; do
     if [[ ! -f "${PUBLISH_DIR}/deploy/raspberry-pi/${receiver_file}" ]]; then
         echo "Selected source is still missing required Soloist file ${receiver_file}. No existing application or receiver services were stopped." >&2
         exit 1
@@ -333,18 +337,20 @@ install -m 0644 "${UDEV_FILE}" /etc/udev/rules.d/99-lego-dimensions.rules
 install -m 0644 "${SERVICE_FILE}" "/etc/systemd/system/${SERVICE_NAME}.service"
 install -d -o root -g root -m 0755 /usr/local/lib/musicdimension /etc/musicdimension-soloist /opt/musicdimension-soloist /var/lib/musicdimension-receiver
 install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/configure-receiver.py" /usr/local/lib/musicdimension/configure-receiver.py
+install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/configure-bluetooth.py" /usr/local/lib/musicdimension/configure-bluetooth.py
 install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/update-soloist.py" /usr/local/lib/musicdimension/update-soloist.py
 install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/run-soloist.py" /usr/local/lib/musicdimension/run-soloist.py
-for unit in musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer; do
+for unit in musicdimension-audio.service musicdimension-soloist.service musicdimension-receiver.service musicdimension-receiver.path musicdimension-receiver.timer musicdimension-bluetooth.service musicdimension-bluetooth.path; do
     install -m 0644 "${INSTALL_DIR}/deploy/raspberry-pi/${unit}" "/etc/systemd/system/${unit}"
 done
+install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" -m 0700 /var/lib/musicdimension-receiver/requests
 install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" -m 0700 /var/lib/musicdimension/soloist /var/cache/musicdimension/soloist
 
 udevadm control --reload-rules
 udevadm trigger --subsystem-match=usb
 systemctl daemon-reload
 systemctl start musicdimension-receiver.service
-systemctl enable --now musicdimension-receiver.path musicdimension-receiver.timer
+systemctl enable --now bluetooth.service musicdimension-receiver.path musicdimension-receiver.timer musicdimension-bluetooth.path
 systemctl enable --now "${SERVICE_NAME}"
 
 if ! systemctl is-active --quiet "${SERVICE_NAME}"; then

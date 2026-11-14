@@ -15,5 +15,8 @@
 
         [JsonProperty("resumePlayback")]
         public bool ResumePlayback { get; set; }
+
+        [JsonProperty("audioOutput")]
+        public string AudioOutput { get; set; } = "headphones";
     }
 }

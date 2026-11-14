@@ -156,6 +156,17 @@
             <input id="clearSoloistApiKey" type="checkbox">
             Clear saved Soloist API key
           </label>
+          <div class="bluetooth-tools">
+            <label for="bluetoothDevicePicker">Pair a Bluetooth audio device</label>
+            <div class="bluetooth-actions">
+              <button id="scanBluetoothButton" class="button button-secondary" type="button">Find devices</button>
+              <select id="bluetoothDevicePicker" aria-label="Bluetooth devices" disabled>
+                <option value="">Scan for devices</option>
+              </select>
+              <button id="connectBluetoothButton" class="button button-secondary" type="button" disabled>Pair / connect</button>
+            </div>
+            <span id="bluetoothMessage" class="form-message" role="status" aria-live="polite">Pair a speaker or headset to make it available for tags.</span>
+          </div>
           <a class="spotify-result-link" href="https://developer.spotify.com/dashboard/soloist" target="_blank" rel="noopener noreferrer">Spotify Soloist API key dashboard ↗</a>
         </fieldset>
         <div class="receiver-status-row">
@@ -237,6 +248,13 @@
             <select id="sourceSelect" name="type">
               <option value="local">Local media</option>
               <option value="spotify">Spotify</option>
+            </select>
+          </div>
+
+          <div class="field-group">
+            <label for="audioOutput">Sound output for this tag</label>
+            <select id="audioOutput" name="audioOutput">
+              <option value="headphones">Pi headphone jack</option>
             </select>
           </div>
 

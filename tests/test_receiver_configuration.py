@@ -62,7 +62,9 @@ class ReceiverConfigurationTests(unittest.TestCase):
         self.assertEqual(json.loads(content)["name"], self.settings["spotifyDeviceName"])
         self.assertEqual(json.loads(content)["apiKey"], "fixture-private-key")
         self.assertIn("module-alsa-sink device=plughw:CARD=Headphones,DEV=0", self.audio.read_text())
+        self.assertIn("module-bluetooth-discover", self.audio.read_text())
         self.assertIn(("restart", "musicdimension-soloist.service"), self.commands)
+        self.assertIn(("enable", "musicdimension-audio.service"), self.commands)
         self.assertEqual(applied["name"], self.settings["spotifyDeviceName"])
         self.commands.clear()
         receiver.apply_settings()
@@ -84,8 +86,8 @@ class ReceiverConfigurationTests(unittest.TestCase):
         self.settings["receiver"]["enabled"] = False
         self.save()
         receiver.apply_settings()
-        self.assertIn(("disable", "--now", "musicdimension-soloist.service", "musicdimension-audio.service"), self.commands)
-        self.assertFalse(any(command[0] in ("start", "restart", "enable") for command in self.commands))
+        self.assertIn(("disable", "--now", "musicdimension-soloist.service"), self.commands)
+        self.assertTrue(any(command[0] in ("start", "restart") and command[1:] == ("musicdimension-audio.service",) for command in self.commands))
 
     def test_rejects_injected_or_invalid_values_before_writes(self):
         invalid = [
@@ -145,15 +147,25 @@ class ReceiverConfigurationTests(unittest.TestCase):
         status = receiver.apply_settings()
         self.assertFalse(status["apiKeyConfigured"])
         self.assertIn("Save your Spotify Soloist API key", status["error"])
-        self.assertFalse(any(command[0] in ("enable", "start", "restart") for command in self.commands))
+        self.assertTrue(any(command[0] in ("start", "restart") and command[1:] == ("musicdimension-audio.service",) for command in self.commands))
+        self.assertFalse(any(command[0] in ("enable", "start", "restart") and "soloist" in " ".join(command) for command in self.commands))
 
     def test_startup_checks_and_private_local_api(self):
         unit = (ROOT / "deploy/raspberry-pi/musicdimension.service").read_text()
         self.assertIn("update-soloist.py --startup", unit)
+        self.assertIn("Environment=MUSICDIMENSION_AUDIO_OUTPUT=pulse", unit)
+        self.assertIn("PULSE_SERVER=unix:/run/musicdimension-audio/native", unit)
         launcher = (ROOT / "deploy/raspberry-pi/run-soloist.py").read_text()
         self.assertIn('"127.0.0.1:9876"', launcher)
         self.assertIn('"/var/lib/musicdimension/soloist"', launcher)
         self.assertIn('"/var/cache/musicdimension/soloist"', launcher)
+        audio = (ROOT / "deploy/raspberry-pi/musicdimension-audio.service").read_text()
+        self.assertIn("After=sound.target bluetooth.service", audio)
+        bluetooth = (ROOT / "deploy/raspberry-pi/musicdimension-bluetooth.path").read_text()
+        self.assertIn("bluetooth-request.json", bluetooth)
+        installer = (ROOT / "install.sh").read_text()
+        self.assertIn("pulseaudio-module-bluetooth", installer)
+        self.assertIn("musicdimension-bluetooth.path", installer)
 
     def test_invalid_key_rejected(self):
         for key in ("private\nkey", "x" * 4097, {"unexpected": "object"}):
