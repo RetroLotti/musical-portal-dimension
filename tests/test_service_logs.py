@@ -55,6 +55,23 @@ class ServiceLogTests(unittest.TestCase):
         self.assertIn("musicdimension-audio.service", arguments)
         self.assertNotIn("shell", arguments)
 
+    def test_power_status_reports_current_and_historical_under_voltage(self):
+        with patch.object(service_logs.subprocess, "run", side_effect=[
+            subprocess.CompletedProcess([], 0, "throttled=0x50001\n", ""),
+            subprocess.CompletedProcess([], 0, "volt=0.8425V\n", ""),
+        ]) as run:
+            output = service_logs.read_power_status()
+        self.assertIn("Under-voltage: current=yes, since boot=yes", output)
+        self.assertIn("CPU throttled: current=no, since boot=yes", output)
+        self.assertIn("SoC core voltage reading: volt=0.8425V", output)
+        self.assertIn("not the 5 V input rail", output)
+        self.assertEqual(run.call_args_list[0].args[0], ["/usr/bin/vcgencmd", "get_throttled"])
+
+    def test_power_status_explains_missing_vcgencmd(self):
+        with patch.object(service_logs.subprocess, "run", side_effect=FileNotFoundError):
+            with self.assertRaisesRegex(RuntimeError, "vcgencmd is unavailable"):
+                service_logs.read_power_status()
+
     def test_main_writes_requested_logs(self):
         self.request.write_text(json.dumps({"requestId": "a2", "service": "bluetooth", "lines": 50}))
         with patch.object(service_logs, "read_logs", return_value="Bluetooth service log\n"):

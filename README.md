@@ -57,7 +57,7 @@ The LEGO Dimensions Toy Pad rule uses vendor/product `0e6f:0241` and grants acce
 
 In **Playback controls → Upload limit**, set the maximum size for each local media or M3U/M3U8 upload. The default remains **512 MiB** for existing installs. Supported values are **1–4096 MiB**; the web UI skips larger files before upload, and the server independently rejects them. This is a per-file limit, not a total library quota, so consider the Pi's available storage before raising it. Existing media files are unaffected.
 
-The **Service logs** tab can show recent entries from Music Dimension, private audio, Soloist, receiver configuration, Bluetooth pairing, and the Bluetooth daemon. Choose 50, 100, or 200 lines. Output is read by a fixed-unit root helper, limited to 64 KiB, and common credential fields are redacted. Keep the web manager on a trusted LAN; logs may still contain device names, file paths, and other operational details.
+The **Service logs** tab can show recent entries from Music Dimension, private audio, Soloist, receiver configuration, Bluetooth pairing, and the Bluetooth daemon. It can also show the Pi firmware's current and since-boot under-voltage, throttling, and temperature flags. The SoC core-voltage reading is labeled separately because it is not the 5 V input rail. Choose 50, 100, or 200 lines for logs. Output is read by a fixed-unit root helper, limited to 64 KiB, and common credential fields are redacted. Keep the web manager on a trusted LAN; logs may still contain device names, file paths, and other operational details.
 
 ### Playback Control Tags
 

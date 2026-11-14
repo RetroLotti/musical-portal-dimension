@@ -978,7 +978,9 @@ async function loadServiceLogs() {
       if (status.state === "error") throw new Error(status.message || "Could not read service logs.");
       if (status.state === "complete") {
         output.textContent = status.logs || "No recent log entries.";
-        message.textContent = `${status.service} · latest ${status.lines} lines`;
+        message.textContent = status.service === "power"
+          ? "Raspberry Pi firmware power status"
+          : `${status.service} · latest ${status.lines} lines`;
         output.scrollTop = output.scrollHeight;
         return;
       }
