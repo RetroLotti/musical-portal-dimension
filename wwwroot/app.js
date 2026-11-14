@@ -27,6 +27,7 @@ let mediaMaxFileSizeMb = 512;
 let selectedMediaPaths = new Set();
 let toastTimer;
 let playbackStatusTimer = null;
+let playbackStatusLoading = false;
 
 async function request(url, options = {}) {
   const response = await fetch(url, options);
@@ -45,6 +46,7 @@ function showToast(message) {
 }
 
 function audioOutputName(value) {
+  if (value === "default") return `Global default (${audioOutputName(document.querySelector("#defaultAudioOutput")?.value || "headphones")})`;
   if (!value || value === "headphones") return "Pi headphone jack";
   const address = value.replace(/^bluetooth:/i, "");
   return bluetoothDevices.find(device => device.address.toLowerCase() === address.toLowerCase())?.name || `Bluetooth ${address}`;
@@ -52,7 +54,23 @@ function audioOutputName(value) {
 
 function renderAudioOutputOptions(selected = document.querySelector("#audioOutput").value) {
   const picker = document.querySelector("#audioOutput");
-  const options = [new Option("Pi headphone jack", "headphones")];
+  const globalOutput = document.querySelector("#defaultAudioOutput")?.value || "headphones";
+  const options = [
+    new Option(`Use global default (${audioOutputName(globalOutput)})`, "default"),
+    new Option("Pi configured output (headphone/HDMI)", "headphones")
+  ];
+  for (const device of bluetoothDevices.filter(item => item.paired)) {
+    options.push(new Option(`${device.name}${device.connected ? " (connected)" : ""}`, `bluetooth:${device.address}`));
+  }
+  if (selected !== "headphones" && selected !== "default" && !options.some(option => option.value === selected))
+    options.push(new Option(`${audioOutputName(selected)} (not connected)`, selected));
+  picker.replaceChildren(...options);
+  picker.value = selected || "default";
+}
+
+function renderDefaultAudioOutputOptions(selected = document.querySelector("#defaultAudioOutput").value) {
+  const picker = document.querySelector("#defaultAudioOutput");
+  const options = [new Option("Pi configured output (headphone/HDMI)", "headphones")];
   for (const device of bluetoothDevices.filter(item => item.paired)) {
     options.push(new Option(`${device.name}${device.connected ? " (connected)" : ""}`, `bluetooth:${device.address}`));
   }
@@ -92,6 +110,8 @@ function formatPlaybackTime(milliseconds) {
 }
 
 async function refreshPlaybackStatus() {
+  if (playbackStatusLoading) return;
+  playbackStatusLoading = true;
   try {
     const status = await request("/api/playback/status");
     const title = document.querySelector("#nowPlayingHeading");
@@ -107,11 +127,24 @@ async function refreshPlaybackStatus() {
     document.querySelector("#nowPlayingVolume").textContent = status.volume == null ? "Volume unavailable" : `Volume ${status.volume}%`;
     const duration = Math.max(0, status.durationMs ?? 0);
     const position = Math.max(0, status.positionMs ?? 0);
-    progress.value = duration > 0 ? Math.min(1000, Math.round(position / duration * 1000)) : 0;
+    const progressValue = duration > 0 ? Math.min(1000, Math.round(position / duration * 1000)) : 0;
+    progress.value = progressValue;
     document.querySelector("#nowPlayingElapsed").textContent = formatPlaybackTime(position);
     document.querySelector("#nowPlayingDuration").textContent = formatPlaybackTime(duration);
+    document.querySelector("#siteNowPlayingTitle").textContent = status.active ? status.track || "Unknown track" : "Waiting for a music tag";
+    document.querySelector("#siteNowPlayingState").textContent = status.active ? status.isPlaying ? "Playing" : "Paused" : "Idle";
+    document.querySelector("#siteNowPlayingSource").textContent = status.source
+      ? `${status.source === "spotify" ? "Spotify" : "Local media"}${status.device ? ` · ${status.device}` : ""}`
+      : "No active tag";
+    document.querySelector("#siteNowPlayingOutput").textContent = `Output: ${audioOutputName(status.audioOutput)}`;
+    document.querySelector("#siteNowPlayingProgress").value = progressValue;
+    document.querySelector("#siteNowPlayingElapsed").textContent = formatPlaybackTime(position);
+    document.querySelector("#siteNowPlayingDuration").textContent = formatPlaybackTime(duration);
   } catch (error) {
     document.querySelector("#nowPlayingState").textContent = "Unavailable";
+    document.querySelector("#siteNowPlayingState").textContent = "Status unavailable";
+  } finally {
+    playbackStatusLoading = false;
   }
 }
 
@@ -250,6 +283,7 @@ async function refresh() {
   ]);
   library = nextLibrary;
   spotifyEnabled = status.spotifyEnabled;
+  document.querySelector("#appVersion").textContent = `Installed version ${status.version || "unknown"}`;
   await loadBluetoothStatus();
   document.querySelector("#forwardUid").value = configuredControlUid("next");
   document.querySelector("#rewindUid").value = configuredControlUid("previous");
@@ -476,7 +510,7 @@ async function editTag(tag) {
   document.querySelector("#uidInput").readOnly = true;
   document.querySelector("#nameInput").value = tag.name ?? "";
   document.querySelector("#resumePlayback").checked = Boolean(tag.resumePlayback);
-  renderAudioOutputOptions(tag.audioOutput ?? "headphones");
+  renderAudioOutputOptions(tag.audioOutput ?? "default");
   sourceSelect.value = source;
   document.querySelector("#spotifyType").value = songs[0]?.spotifyType ?? "track";
   document.querySelector("#spotifyId").value = "";
@@ -523,7 +557,7 @@ function cancelEdit() {
   uploadQueue = [];
   spotifyQueue = [];
   document.querySelector("#tagForm").reset();
-  renderAudioOutputOptions("headphones");
+  renderAudioOutputOptions("default");
   document.querySelector("#uidInput").readOnly = false;
   document.querySelector("#editorTitle").textContent = "Register a tag";
   document.querySelector("#saveLabel").textContent = "Add tag";
@@ -905,6 +939,7 @@ async function loadBluetoothStatus() {
   bluetoothManaged = status.managed;
   bluetoothDevices = status.devices ?? [];
   renderBluetoothDevicePicker(bluetoothDevices);
+  renderDefaultAudioOutputOptions();
   renderAudioOutputOptions();
   document.querySelector("#bluetoothMessage").textContent = status.message ?? "";
   document.querySelector("#scanBluetoothButton").disabled = status.state === "running";
@@ -1093,6 +1128,7 @@ async function loadSpotifySettings() {
   document.querySelector("#spotifyClearSecret").checked = false;
   document.querySelector("#receiverEnabled").checked = settings.receiver?.enabled ?? true;
   document.querySelector("#receiverAudioDevice").value = settings.receiver?.audioDevice ?? "plughw:CARD=Headphones,DEV=0";
+  renderDefaultAudioOutputOptions(settings.defaultAudioOutput ?? "headphones");
   document.querySelector("#soloistApiKey").value = "";
   document.querySelector("#soloistApiKey").placeholder = settings.receiver?.hasSoloistApiKey ? "Saved (unchanged)" : "Not set";
   document.querySelector("#clearSoloistApiKey").checked = false;
@@ -1201,6 +1237,7 @@ async function saveSpotifySettings(event) {
       body: JSON.stringify({
         enable: document.querySelector("#spotifyEnable").checked,
         spotifyDeviceName: document.querySelector("#spotifyDeviceName").value,
+        defaultAudioOutput: document.querySelector("#defaultAudioOutput").value,
         clientId: document.querySelector("#spotifyClientId").value,
         clientSecret: document.querySelector("#spotifyClearSecret").checked
           ? "" : document.querySelector("#spotifyClientSecret").value || null,
@@ -1390,12 +1427,7 @@ function selectSectionTab(selectedTab) {
     tab.tabIndex = selected ? 0 : -1;
     document.getElementById(tab.getAttribute("aria-controls")).hidden = !selected;
   }
-  if (playbackStatusTimer !== null) clearInterval(playbackStatusTimer);
-  playbackStatusTimer = null;
-  if (selectedTab.id === "controlsTab") {
-    refreshPlaybackStatus();
-    playbackStatusTimer = setInterval(refreshPlaybackStatus, 5000);
-  }
+  if (selectedTab.id === "controlsTab") refreshPlaybackStatus();
 }
 
 for (const [index, tab] of sectionTabs.entries()) {
@@ -1416,6 +1448,10 @@ for (const [index, tab] of sectionTabs.entries()) {
 }
 
 document.querySelector("#spotifySettingsForm").addEventListener("submit", saveSpotifySettings);
+document.querySelector("#defaultAudioOutput").addEventListener("change", () => {
+  renderAudioOutputOptions();
+  renderTags();
+});
 document.querySelector("#mediaSettingsForm").addEventListener("submit", saveMediaSettings);
 document.querySelector("#playbackSettingsForm").addEventListener("submit", savePlaybackSettings);
 for (const button of document.querySelectorAll("[data-playback-action]"))
@@ -1455,3 +1491,7 @@ loadMediaSettings().catch(error => showToast(error.message));
 loadPlaybackSettings().catch(error => showToast(error.message));
 loadSpotifySettings().catch(error => showToast(error.message));
 renderQueue();
+refreshPlaybackStatus();
+playbackStatusTimer = setInterval(refreshPlaybackStatus, 5000);
+refreshPlaybackStatus();
+playbackStatusTimer = setInterval(refreshPlaybackStatus, 5000);

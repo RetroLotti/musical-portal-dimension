@@ -21,24 +21,22 @@ namespace MusicDimension.misc
                     var address = output![10..];
                     if (!Regex.IsMatch(address, @"\A(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\Z"))
                         throw new InvalidOperationException("Invalid Bluetooth output address.");
-                    var cards = await RunPactlAsync("list", "short", "cards");
-                    var card = cards.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                        .Select(line => line.Split('\t', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
-                        .FirstOrDefault(name => name != null && name.StartsWith("bluez_card.", StringComparison.OrdinalIgnoreCase)
-                            && string.Equals(name[11..], address.Replace(':', '_'), StringComparison.OrdinalIgnoreCase))
-                        ?? throw new InvalidOperationException("The paired Bluetooth audio card is not available. Reconnect it in Spotify settings.");
+                    var normalizedAddress = address.Replace(':', '_');
+                    var card = await WaitForBluetoothObjectAsync("cards", name =>
+                        name.StartsWith("bluez_card.", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(name[11..], normalizedAddress, StringComparison.OrdinalIgnoreCase),
+                        "The Bluetooth connection is active, but PulseAudio has not created its card yet.");
                     await RunPactlAsync("set-card-profile", card, "a2dp_sink");
-                    var sinks = await RunPactlAsync("list", "short", "sinks");
-                    sink = sinks.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                        .Select(line => line.Split('\t', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
-                        .FirstOrDefault(name => name != null && BluetoothSinkPattern.IsMatch(name)
-                            && string.Equals(BluetoothSinkPattern.Match(name).Groups["address"].Value,
-                                address.Replace(':', '_'), StringComparison.OrdinalIgnoreCase))
-                        ?? throw new InvalidOperationException("The paired Bluetooth audio sink is not available. Reconnect it in Spotify settings.");
+                    sink = await WaitForBluetoothObjectAsync("sinks", name =>
+                        BluetoothSinkPattern.IsMatch(name)
+                        && string.Equals(BluetoothSinkPattern.Match(name).Groups["address"].Value,
+                            normalizedAddress, StringComparison.OrdinalIgnoreCase),
+                        "PulseAudio did not create an A2DP output for the connected device.");
                 }
 
                 await RunPactlAsync("set-default-sink", sink);
                 await MoveSinkInputsAsync(sink);
+                Console.WriteLine($"Selected audio sink '{sink}' for tag output '{output ?? "headphones"}'.");
                 return true;
             }
             catch (Exception exception) when (exception is InvalidOperationException or IOException or TimeoutException or System.ComponentModel.Win32Exception)
@@ -50,6 +48,7 @@ namespace MusicDimension.misc
                     {
                         await RunPactlAsync("set-default-sink", "musicdimension");
                         await MoveSinkInputsAsync("musicdimension");
+                        Console.WriteLine("Using the headphone output after Bluetooth sink selection failed.");
                         return false;
                     }
                     catch (Exception fallbackException) when (fallbackException is InvalidOperationException or IOException or TimeoutException or System.ComponentModel.Win32Exception)
@@ -59,6 +58,20 @@ namespace MusicDimension.misc
                 }
                 return false;
             }
+        }
+
+        private static async Task<string> WaitForBluetoothObjectAsync(string objectType, Func<string, bool> matches, string unavailableMessage)
+        {
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                var output = await RunPactlAsync("list", "short", objectType);
+                var match = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(line => line.Split('\t', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                    .FirstOrDefault(name => name != null && matches(name));
+                if (match != null) return match;
+                if (attempt < 9) await Task.Delay(TimeSpan.FromMilliseconds(500));
+            }
+            throw new InvalidOperationException(unavailableMessage);
         }
 
         private static async Task MoveSinkInputsAsync(string sink)

@@ -66,12 +66,20 @@ button { cursor: pointer; }
 
 main { width: min(1200px, calc(100% - 48px)); margin: 0 auto; padding: 42px 0 64px; }
 .page-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; animation: enter .35s ease-out both; }
+.app-version { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
 .eyebrow { margin: 0 0 8px; color: var(--forest-light); font-size: 10px; font-weight: 700; letter-spacing: 1.4px; }
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(32px, 5vw, 46px); font-weight: 400; line-height: 1.05; }
 h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23px; font-weight: 400; }
 .icon-button { width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 6px; color: var(--forest); background: var(--surface); font-size: 24px; line-height: 1; }
 .icon-button:hover { border-color: var(--forest-light); background: #f7faef; }
+.site-playback-status { display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: center; gap: 8px 20px; margin-bottom: 20px; padding: 14px 18px; border-inline-start: 4px solid var(--coral); background: var(--surface); box-shadow: 0 4px 14px rgba(24, 59, 52, .05); }
+.site-playback-title { min-width: 0; }
+.site-playback-title .eyebrow { margin-bottom: 4px; }
+.site-playback-title h2 { overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.site-playback-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px 12px; color: var(--muted); font-size: 11px; }
+.site-playback-status progress { grid-column: 1 / -1; width: 100%; height: 4px; accent-color: var(--forest-light); }
+.site-playback-time { grid-column: 1 / -1; display: flex; justify-content: space-between; color: var(--muted); font: 10px Consolas, "Liberation Mono", monospace; }
 
 .section-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 20px; border-bottom: 1px solid var(--line); }
 .section-tab { min-width: 0; min-height: 52px; padding: 10px 8px; border: 0; border-bottom: 3px solid transparent; color: var(--muted); background: transparent; font-size: 13px; font-weight: 700; line-height: 1.4; letter-spacing: 0; }
@@ -116,8 +124,9 @@ h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23px;
 .receiver-settings:disabled { opacity: .6; }
 .bluetooth-tools { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid var(--line); }
 .bluetooth-tools > label { color: #34443e; font-size: 11px; font-weight: 700; }
-.bluetooth-actions { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
-.bluetooth-actions .button { min-height: 40px; padding-inline: 11px; }
+.bluetooth-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bluetooth-actions .button { flex: 0 0 auto; width: auto; min-height: 40px; padding-inline: 11px; }
+.bluetooth-actions select { flex: 1 1 180px; width: auto; }
 .bluetooth-tools .form-message { overflow-wrap: anywhere; }
 .spotify-device-name-row { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 8px; }
 #spotifyAvailableDevices[hidden], #spotifyDevicesLabel[hidden] { display: none; }
@@ -277,6 +286,9 @@ input::placeholder { color: #9ba8a1; }
   .topbar-status { gap: 6px; font-size: 10px; }
   .status-divider { margin: 0 1px; }
   main { width: calc(100% - 24px); padding: 24px 0 40px; }
+  .site-playback-status { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 12px; }
+  .site-playback-meta { justify-content: flex-start; }
+  .site-playback-title h2 { font-size: 16px; }
   .library-section, .editor-section { padding: 22px 18px 24px; }
   .uid-control { grid-template-columns: 1fr; }
   .button-secondary { justify-self: start; }

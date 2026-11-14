@@ -27,10 +27,25 @@
       <div>
         <p class="eyebrow">PORTAL CONTROL / LIBRARY</p>
         <h1>Music manager</h1>
+        <p id="appVersion" class="app-version">Installed version unavailable</p>
       </div>
       <button id="refreshButton" class="icon-button" type="button" title="Refresh library" aria-label="Refresh library">
         <span aria-hidden="true">↻</span>
       </button>
+    </section>
+
+    <section class="site-playback-status" aria-label="Current playback" aria-live="polite">
+      <div class="site-playback-title">
+        <p class="eyebrow">NOW PLAYING</p>
+        <h2 id="siteNowPlayingTitle">Waiting for a music tag</h2>
+      </div>
+      <div class="site-playback-meta">
+        <span id="siteNowPlayingState">Idle</span>
+        <span id="siteNowPlayingSource">No active tag</span>
+        <span id="siteNowPlayingOutput">Output unavailable</span>
+      </div>
+      <progress id="siteNowPlayingProgress" max="1000" value="0" aria-label="Current track progress"></progress>
+      <div class="site-playback-time"><time id="siteNowPlayingElapsed">0:00</time><time id="siteNowPlayingDuration">0:00</time></div>
     </section>
 
     <div class="section-tabs" role="tablist" aria-label="Music manager sections">
@@ -210,6 +225,13 @@
             <input id="spotifyClearSecret" type="checkbox">
             Clear saved client secret
           </label>
+        </div>
+        <div class="field-group global-audio-output">
+          <label for="defaultAudioOutput">Default audio output for tags</label>
+          <select id="defaultAudioOutput">
+            <option value="headphones">Pi configured output (headphone/HDMI)</option>
+          </select>
+          <span class="field-note">Used by tags set to Use global default. Individual tags can override this.</span>
         </div>
         <fieldset id="receiverSettings" class="receiver-settings" disabled>
           <legend>Pi Spotify Connect receiver</legend>

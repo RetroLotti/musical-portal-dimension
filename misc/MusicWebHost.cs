@@ -52,14 +52,20 @@ namespace MusicDimension.misc
                 var configuration = spotify.Configuration;
                 var backup = new MusicDimensionBackup(1, DateTimeOffset.UtcNow,
                     new BackupSettings(configuration.Enable, configuration.ClientId, configuration.SpotifyDeviceName,
-                        configuration.Receiver.Enabled, configuration.Receiver.AudioDevice, configuration.Receiver.Bitrate,
+                        configuration.Receiver.Enabled, configuration.Receiver.AudioDevice, configuration.DefaultAudioOutput,
+                        configuration.Receiver.Bitrate,
                         configuration.MediaMaxFileSizeMb, configuration.InitialVolume), store.Snapshot());
                 var bytes = JsonSerializer.SerializeToUtf8Bytes(backup, BackupJsonOptions);
                 return Results.File(bytes, "application/json", "musicdimension-backup.json");
             });
             app.MapPost("/api/backup", (HttpRequest request, CancellationToken cancellationToken) =>
                 RestoreBackupAsync(request, cancellationToken, store, spotify, configFileName));
-            app.MapGet("/api/status", () => Results.Ok(new { spotifyEnabled = spotify.Configuration.Enable, readerConnected = isReaderConnected() }));
+            app.MapGet("/api/status", () => Results.Ok(new
+            {
+                spotifyEnabled = spotify.Configuration.Enable,
+                readerConnected = isReaderConnected(),
+                version = GetApplicationVersion()
+            }));
             app.MapGet("/api/settings/spotify", () => Results.Ok(GetSpotifySettings(spotify)));
             app.MapGet("/api/settings/media", () => Results.Ok(new MediaSettingsResponse(spotify.Configuration.MediaMaxFileSizeMb)));
             app.MapGet("/api/settings/playback", () => Results.Ok(new PlaybackSettingsResponse(spotify.Configuration.InitialVolume)));
@@ -169,10 +175,13 @@ namespace MusicDimension.misc
 
                 var current = spotify.Configuration;
                 var receiver = request.Receiver ?? current.Receiver;
+                var defaultAudioOutput = request.DefaultAudioOutput?.Trim() ?? current.DefaultAudioOutput;
                 if (receiver == null || receiver.Bitrate is not (96 or 160 or 320)
                     || string.IsNullOrEmpty(receiver.AudioDevice) || receiver.AudioDevice.Length > 128
                     || !Regex.IsMatch(receiver.AudioDevice, @"\A[A-Za-z0-9_:,=.\-]+\z"))
                     return Results.BadRequest(new { message = "Choose 96, 160, or 320 kbps and a valid ALSA audio device (for example default or plughw:CARD=Headphones,DEV=0)." });
+                if (!IsValidAudioOutput(defaultAudioOutput))
+                    return Results.BadRequest(new { message = "Choose the Pi audio output or a valid paired Bluetooth device." });
                 if (receiver.SoloistApiKey != null && (receiver.SoloistApiKey.Length > 4096
                     || receiver.SoloistApiKey.Any(character => character < 33 || character > 126)))
                     return Results.BadRequest(new { message = "Enter a valid Soloist API key without whitespace (maximum 4096 characters)." });
@@ -189,6 +198,7 @@ namespace MusicDimension.misc
                     Receiver = receiver,
                     MediaMaxFileSizeMb = current.MediaMaxFileSizeMb,
                     InitialVolume = current.InitialVolume,
+                    DefaultAudioOutput = defaultAudioOutput,
                     TokenFileName = current.TokenFileName
                 };
                 try
@@ -259,6 +269,7 @@ namespace MusicDimension.misc
                 },
                 MediaMaxFileSizeMb = settings.MediaMaxFileSizeMb,
                 InitialVolume = settings.InitialVolume,
+                DefaultAudioOutput = settings.DefaultAudioOutput ?? "headphones",
                 TokenFileName = current.TokenFileName
             };
 
@@ -294,7 +305,8 @@ namespace MusicDimension.misc
             if (settings.Bitrate is not (96 or 160 or 320)
                 || settings.AudioDevice == null || !Regex.IsMatch(settings.AudioDevice, @"\A[A-Za-z0-9_:,.\-]{1,128}\Z")
                 || settings.MediaMaxFileSizeMb is < 1 or > MaximumUploadFileSizeMb
-                || settings.InitialVolume is < 0 or > 100)
+                || settings.InitialVolume is < 0 or > 100
+                || !IsValidAudioOutput(settings.DefaultAudioOutput ?? "headphones"))
                 return "The backup contains invalid audio or media settings.";
 
             var library = backup.Library!;
@@ -306,9 +318,8 @@ namespace MusicDimension.misc
                 if (tag == null || (tag.Uid = NormalizeUid(tag.Uid) ?? "").Length == 0 || !tagUids.Add(tag.Uid)
                     || string.IsNullOrWhiteSpace(tag.Name) || tag.Name.Length > 100)
                     return "The backup contains an invalid tag or duplicate tag UID.";
-                tag.AudioOutput ??= "headphones";
-                if (!string.Equals(tag.AudioOutput, "headphones", StringComparison.OrdinalIgnoreCase)
-                    && !Regex.IsMatch(tag.AudioOutput, @"\Abluetooth:(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\Z"))
+                tag.AudioOutput ??= "default";
+                if (tag.AudioOutput != "default" && !IsValidAudioOutput(tag.AudioOutput))
                     return $"Tag {tag.Uid} has an invalid audio output.";
                 if (tag.Songs == null || tag.Songs.Count is < 1 or > 100)
                     return $"Tag {tag.Uid} has an invalid song list.";
@@ -348,7 +359,21 @@ namespace MusicDimension.misc
             var configuration = spotify.Configuration;
             return new(configuration.Enable, configuration.ClientId, configuration.SpotifyDeviceName,
                 !string.IsNullOrEmpty(configuration.ClientSecret), new ReceiverSettingsResponse(configuration.Receiver.Enabled,
-                    configuration.Receiver.AudioDevice, configuration.Receiver.Bitrate, spotify.HasSoloistApiKey));
+                    configuration.Receiver.AudioDevice, configuration.Receiver.Bitrate, spotify.HasSoloistApiKey), configuration.DefaultAudioOutput);
+        }
+
+        private static bool IsValidAudioOutput(string? output) =>
+            string.Equals(output, "headphones", StringComparison.OrdinalIgnoreCase)
+            || (output != null && Regex.IsMatch(output, @"\Abluetooth:(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\Z"));
+
+        private static string GetApplicationVersion()
+        {
+            var assembly = typeof(MusicWebHost).Assembly;
+            var informationalVersion = Attribute.GetCustomAttribute(assembly,
+                typeof(System.Reflection.AssemblyInformationalVersionAttribute)) as System.Reflection.AssemblyInformationalVersionAttribute;
+            return informationalVersion?.InformationalVersion
+                ?? assembly.GetName().Version?.ToString(3)
+                ?? "unknown";
         }
 
         private static IResult StartBluetoothOperation(HttpContext context, string operation, string? address = null)
@@ -592,10 +617,12 @@ namespace MusicDimension.misc
         }
 
         /// <summary>Editable Spotify configuration; a null secret preserves its current value.</summary>
-        public sealed record UpdateSpotifySettingsRequest(bool Enable, string? ClientId, string? SpotifyDeviceName, string? ClientSecret, ReceiverConfig? Receiver = null);
+        public sealed record UpdateSpotifySettingsRequest(bool Enable, string? ClientId, string? SpotifyDeviceName, string? ClientSecret,
+            ReceiverConfig? Receiver = null, string? DefaultAudioOutput = null);
 
         /// <summary>Spotify settings without credentials or token file paths.</summary>
-        public sealed record SpotifySettingsResponse(bool Enable, string ClientId, string SpotifyDeviceName, bool HasClientSecret, ReceiverSettingsResponse Receiver);
+        public sealed record SpotifySettingsResponse(bool Enable, string ClientId, string SpotifyDeviceName, bool HasClientSecret,
+            ReceiverSettingsResponse Receiver, string DefaultAudioOutput);
 
         /// <summary>Receiver settings without the private Spotify Soloist API key.</summary>
         public sealed record ReceiverSettingsResponse(bool Enabled, string AudioDevice, int Bitrate, bool HasSoloistApiKey);
@@ -716,11 +743,10 @@ namespace MusicDimension.misc
             }
 
             var songs = new List<Song>();
-            var audioOutput = request.AudioOutput?.Trim() ?? "headphones";
-            if (!string.Equals(audioOutput, "headphones", StringComparison.OrdinalIgnoreCase)
-                && !Regex.IsMatch(audioOutput, @"\Abluetooth:(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\Z"))
+            var audioOutput = request.AudioOutput?.Trim() ?? "default";
+            if (audioOutput != "default" && !IsValidAudioOutput(audioOutput))
             {
-                error = "Choose Headphones or a valid paired Bluetooth device.";
+                error = "Choose the global output, Pi audio output, or a valid paired Bluetooth device.";
                 return null;
             }
             if (audioOutput.StartsWith("bluetooth:", StringComparison.OrdinalIgnoreCase))

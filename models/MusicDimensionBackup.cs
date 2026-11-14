@@ -12,6 +12,7 @@ namespace MusicDimension.models
         string? SpotifyDeviceName,
         bool ReceiverEnabled,
         string? AudioDevice,
+        string? DefaultAudioOutput,
         int Bitrate,
         int MediaMaxFileSizeMb,
         int? InitialVolume);

@@ -414,8 +414,9 @@
 
         private static Task<PlaybackStatus> GetPlaybackStatusAsync()
         {
-            var audioOutput = _currentTagUid == null ? null : _musicStore.Snapshot().RegisteredTags
+            var tagOutput = _currentTagUid == null ? null : _musicStore.Snapshot().RegisteredTags
                 .FirstOrDefault(tag => string.Equals(tag.Uid, _currentTagUid, StringComparison.OrdinalIgnoreCase))?.AudioOutput;
+            var audioOutput = tagOutput == "default" ? _config.DefaultAudioOutput : tagOutput;
             return _currentPlaybackSource switch
             {
                 SourceTypes.Local => Task.FromResult(_localMusicHandler.GetPlaybackStatus(audioOutput)),
@@ -468,14 +469,15 @@
 
         private static async Task SelectTagOutputAsync(Tag tag)
         {
-            if (tag.AudioOutput.StartsWith("bluetooth:", StringComparison.OrdinalIgnoreCase)
-                && !await BluetoothManager.EnsureConnectedAsync(tag.AudioOutput[10..]))
+            var audioOutput = tag.AudioOutput == "default" ? _config.DefaultAudioOutput : tag.AudioOutput;
+            if (audioOutput.StartsWith("bluetooth:", StringComparison.OrdinalIgnoreCase)
+                && !await BluetoothManager.EnsureConnectedAsync(audioOutput[10..]))
             {
                 Console.WriteLine($"Bluetooth output for tag {tag.Uid} is unavailable; using the headphone output.");
                 await AudioOutputController.SelectAsync("headphones");
                 return;
             }
-            if (!await AudioOutputController.SelectAsync(tag.AudioOutput))
+            if (!await AudioOutputController.SelectAsync(audioOutput))
                 Console.WriteLine($"Bluetooth output for tag {tag.Uid} is unavailable; using the headphone output.");
         }
 

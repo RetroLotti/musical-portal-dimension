@@ -25,6 +25,9 @@
         [JsonProperty("initialVolume")]
         public int? InitialVolume { get; set; }
 
+        [JsonProperty("defaultAudioOutput")]
+        public string DefaultAudioOutput { get; set; } = "headphones";
+
         [JsonIgnore]
         public string TokenFileName { get; set; } = null!;
     }
