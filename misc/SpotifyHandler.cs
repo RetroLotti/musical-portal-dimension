@@ -157,6 +157,29 @@
             });
         }
 
+        public async Task<PlaybackStatus> GetPlaybackStatusAsync(string? audioOutput)
+        {
+            PlaybackStatus? status = null;
+            await ExecuteAsync(async spotify =>
+            {
+                var playback = await spotify.Player.GetCurrentPlayback();
+                if (playback?.Device == null
+                    || !string.Equals(playback.Device.Name, _config.SpotifyDeviceName, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                var (trackName, durationMs) = playback.Item switch
+                {
+                    FullTrack track => (track.Name, (long)track.DurationMs),
+                    FullEpisode episode => (episode.Name, (long)episode.DurationMs),
+                    _ => (null, 0L)
+                };
+                if (trackName == null) return;
+                status = new(true, "spotify", trackName, playback.Device.Name, playback.IsPlaying,
+                    Math.Max(0, playback.ProgressMs), Math.Max(0, durationMs), playback.Device.VolumePercent, audioOutput);
+            });
+            return status ?? new(false, null, null, null, false, 0, 0, null, audioOutput);
+        }
+
         public async Task<SpotifyAuthorizationStart> BeginAuthorizationAsync(string sessionId, CancellationToken cancellationToken = default)
         {
             await _operationLock.WaitAsync(cancellationToken);

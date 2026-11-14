@@ -96,6 +96,19 @@
             }
         }
 
+        public PlaybackStatus GetPlaybackStatus(string? audioOutput)
+        {
+            lock (_playlistLock)
+            {
+                if (_currentTrackIndex < 0 || _currentTrackIndex >= _playOrder.Count)
+                    return new(false, null, null, null, false, 0, 0, null, audioOutput);
+
+                var path = _tracks[_playOrder[_currentTrackIndex]];
+                return new(true, "local", Path.GetFileNameWithoutExtension(path), "Local media", Player.IsPlaying,
+                    Math.Max(0, Player.Time), Math.Max(0, Player.Length), Player.Volume is >= 0 and <= 100 ? Player.Volume : null, audioOutput);
+            }
+        }
+
         public void Stop()
         {
             lock (_playlistLock)

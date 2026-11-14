@@ -34,7 +34,7 @@ namespace MusicDimension.misc
         public static string StartOperation(string operation, string? address = null)
         {
             if (!IsManaged) throw new InvalidOperationException("Bluetooth audio management is only available after installing on Raspberry Pi OS.");
-            if (operation is not ("scan" or "connect")) throw new ArgumentException("Choose a Bluetooth scan or connect operation.");
+            if (operation is not ("scan" or "refresh" or "connect")) throw new ArgumentException("Choose a Bluetooth scan, refresh, or connect operation.");
             if (operation == "connect" && (address == null || !AddressPattern.IsMatch(address)))
                 throw new ArgumentException("Choose a Bluetooth device with a valid address.");
             var current = GetStatus();

@@ -26,6 +26,7 @@ let bluetoothManaged = false;
 let mediaMaxFileSizeMb = 512;
 let selectedMediaPaths = new Set();
 let toastTimer;
+let playbackStatusTimer = null;
 
 async function request(url, options = {}) {
   const response = await fetch(url, options);
@@ -69,7 +70,49 @@ function renderBluetoothDevicePicker(devices) {
   }
   picker.replaceChildren(...options);
   picker.disabled = !bluetoothManaged || devices.length === 0;
-  document.querySelector("#connectBluetoothButton").disabled = !bluetoothManaged || !picker.value;
+  updateBluetoothConnectButton();
+}
+
+function updateBluetoothConnectButton() {
+  const picker = document.querySelector("#bluetoothDevicePicker");
+  const button = document.querySelector("#connectBluetoothButton");
+  const device = bluetoothDevices.find(item => item.address === picker.value);
+  button.disabled = !bluetoothManaged || !device;
+  button.textContent = device?.paired ? "Reconnect" : "Pair / connect";
+}
+
+function formatPlaybackTime(milliseconds) {
+  const totalSeconds = Math.floor(Math.max(0, milliseconds) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+async function refreshPlaybackStatus() {
+  try {
+    const status = await request("/api/playback/status");
+    const title = document.querySelector("#nowPlayingHeading");
+    const state = document.querySelector("#nowPlayingState");
+    const progress = document.querySelector("#nowPlayingProgress");
+    title.textContent = status.active ? status.track || "Unknown track" : "Nothing playing";
+    state.textContent = status.active ? status.isPlaying ? "Playing" : "Paused" : "Idle";
+    state.classList.toggle("is-playing", status.active && status.isPlaying);
+    document.querySelector("#nowPlayingSource").textContent = status.source
+      ? `${status.source === "spotify" ? "Spotify" : "Local media"}${status.device ? ` · ${status.device}` : ""}`
+      : "No active tag";
+    document.querySelector("#nowPlayingOutput").textContent = `Output: ${audioOutputName(status.audioOutput)}`;
+    document.querySelector("#nowPlayingVolume").textContent = status.volume == null ? "Volume unavailable" : `Volume ${status.volume}%`;
+    const duration = Math.max(0, status.durationMs ?? 0);
+    const position = Math.max(0, status.positionMs ?? 0);
+    progress.value = duration > 0 ? Math.min(1000, Math.round(position / duration * 1000)) : 0;
+    document.querySelector("#nowPlayingElapsed").textContent = formatPlaybackTime(position);
+    document.querySelector("#nowPlayingDuration").textContent = formatPlaybackTime(duration);
+  } catch (error) {
+    document.querySelector("#nowPlayingState").textContent = "Unavailable";
+  }
 }
 
 function renderTags() {
@@ -137,6 +180,67 @@ async function deleteTag(tag) {
 async function loadMedia() {
   mediaFiles = await request("/api/media");
   return mediaFiles;
+}
+
+async function downloadBackup() {
+  const button = document.querySelector("#downloadBackupButton");
+  const message = document.querySelector("#backupMessage");
+  button.disabled = true;
+  message.textContent = "Preparing backup...";
+  message.classList.remove("error");
+  try {
+    const response = await fetch("/api/backup", { cache: "no-store" });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.message ?? `Backup failed (${response.status})`);
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "musicdimension-backup.json";
+    link.click();
+    URL.revokeObjectURL(url);
+    message.textContent = "Backup downloaded. Media files and Spotify secrets are not included.";
+  } catch (error) {
+    message.textContent = error.message;
+    message.classList.add("error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function restoreBackup() {
+  const input = document.querySelector("#backupFile");
+  const button = document.querySelector("#restoreBackupButton");
+  const message = document.querySelector("#backupMessage");
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) {
+    message.textContent = "Choose a backup smaller than 5 MiB.";
+    message.classList.add("error");
+    return;
+  }
+  if (!window.confirm("Restore this backup? It will replace the current tag library and settings. Existing Spotify secrets and media files will be kept.")) return;
+
+  button.disabled = true;
+  message.textContent = "Restoring backup...";
+  message.classList.remove("error");
+  try {
+    await request("/api/backup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: await file.text()
+    });
+    input.value = "";
+    button.disabled = true;
+    await Promise.all([refresh(), loadSpotifySettings(), loadMediaSettings(), loadPlaybackSettings()]);
+    message.textContent = "Backup restored. Existing media files and Spotify secrets were kept.";
+  } catch (error) {
+    message.textContent = error.message;
+    message.classList.add("error");
+  } finally {
+    button.disabled = !input.files.length;
+  }
 }
 
 async function refresh() {
@@ -813,7 +917,8 @@ async function runBluetoothOperation(operation) {
   scanButton.disabled = true;
   connectButton.disabled = true;
   message.classList.remove("error");
-  message.textContent = operation === "scan" ? "Scanning for nearby devices..." : "Pairing and connecting...";
+  message.textContent = operation === "scan" ? "Scanning for nearby devices..."
+    : operation === "refresh" ? "Refreshing paired-device status..." : "Pairing and connecting...";
   try {
     const address = document.querySelector("#bluetoothDevicePicker").value;
     const result = await request(`/api/audio/bluetooth/${operation}`, {
@@ -832,10 +937,11 @@ async function runBluetoothOperation(operation) {
       if (status.state === "complete") {
         message.textContent = status.message || "Bluetooth setup complete.";
         if (bluetoothDevices.length) {
-          const preferred = operation === "connect" ? address : bluetoothDevices[0].address;
+            const preferred = operation === "connect" ? address : bluetoothDevices.some(device => device.address === document.querySelector("#bluetoothDevicePicker").value)
+              ? document.querySelector("#bluetoothDevicePicker").value : bluetoothDevices[0].address;
           document.querySelector("#bluetoothDevicePicker").value = bluetoothDevices.some(device => device.address === preferred)
             ? preferred : bluetoothDevices[0].address;
-          connectButton.disabled = !bluetoothManaged || !document.querySelector("#bluetoothDevicePicker").value;
+          updateBluetoothConnectButton();
         }
         return;
       }
@@ -887,10 +993,19 @@ async function loadServiceLogs() {
 }
 
 document.querySelector("#scanBluetoothButton").addEventListener("click", () => runBluetoothOperation("scan"));
+document.querySelector("#refreshBluetoothButton").addEventListener("click", () => runBluetoothOperation("refresh"));
 document.querySelector("#connectBluetoothButton").addEventListener("click", () => runBluetoothOperation("connect"));
 document.querySelector("#loadServiceLogsButton").addEventListener("click", loadServiceLogs);
+document.querySelector("#downloadBackupButton").addEventListener("click", downloadBackup);
+document.querySelector("#restoreBackupButton").addEventListener("click", restoreBackup);
+document.querySelector("#backupFile").addEventListener("change", event => {
+  const file = event.target.files[0];
+  document.querySelector("#restoreBackupButton").disabled = !file;
+  document.querySelector("#backupMessage").textContent = file ? `Selected ${file.name}` : "";
+  document.querySelector("#backupMessage").classList.remove("error");
+});
 document.querySelector("#bluetoothDevicePicker").addEventListener("change", event => {
-  document.querySelector("#connectBluetoothButton").disabled = !bluetoothManaged || !event.target.value;
+  updateBluetoothConnectButton();
 });
 
 document.querySelector("#refreshReceiverStatus").addEventListener("click", async event => {
@@ -1268,6 +1383,12 @@ function selectSectionTab(selectedTab) {
     tab.setAttribute("aria-selected", String(selected));
     tab.tabIndex = selected ? 0 : -1;
     document.getElementById(tab.getAttribute("aria-controls")).hidden = !selected;
+  }
+  if (playbackStatusTimer !== null) clearInterval(playbackStatusTimer);
+  playbackStatusTimer = null;
+  if (selectedTab.id === "controlsTab") {
+    refreshPlaybackStatus();
+    playbackStatusTimer = setInterval(refreshPlaybackStatus, 5000);
   }
 }
 

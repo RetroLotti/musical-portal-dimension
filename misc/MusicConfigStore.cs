@@ -34,6 +34,26 @@ namespace MusicDimension.misc
             }
         }
 
+        public void Replace(MusicConfig config)
+        {
+            ArgumentNullException.ThrowIfNull(config);
+            lock (_sync)
+            {
+                var previous = _config;
+                var json = JsonConvert.SerializeObject(config, Settings);
+                _config = JsonConvert.DeserializeObject<MusicConfig>(json, Settings) ?? new MusicConfig();
+                try
+                {
+                    Save();
+                }
+                catch
+                {
+                    _config = previous;
+                    throw;
+                }
+            }
+        }
+
         public List<Song> GetSongs(string uid)
         {
             lock (_sync)

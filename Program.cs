@@ -56,7 +56,7 @@
             _spotifyHandler = new SpotifyHandler(_config);
             var listenUrl = Environment.GetEnvironmentVariable("MUSICDIMENSION_WEB_URL") ?? "http://127.0.0.1:5080";
                 var app = MusicWebHost.Create(_musicStore, ReaderCapture, _spotifyHandler, ConfigFileName,
-                    () => _portalHandler.IsConnected, listenUrl, ExecuteWebPlaybackControlAsync);
+                    () => _portalHandler.IsConnected, listenUrl, ExecuteWebPlaybackControlAsync, GetPlaybackStatusAsync);
             await app.StartAsync();
             Console.WriteLine($"Music manager: {listenUrl}");
 
@@ -410,6 +410,18 @@
                 case "shuffle": await ToggleShuffleAsync(); break;
                 default: throw new ArgumentException("Choose a supported playback action.", nameof(action));
             }
+        }
+
+        private static Task<PlaybackStatus> GetPlaybackStatusAsync()
+        {
+            var audioOutput = _currentTagUid == null ? null : _musicStore.Snapshot().RegisteredTags
+                .FirstOrDefault(tag => string.Equals(tag.Uid, _currentTagUid, StringComparison.OrdinalIgnoreCase))?.AudioOutput;
+            return _currentPlaybackSource switch
+            {
+                SourceTypes.Local => Task.FromResult(_localMusicHandler.GetPlaybackStatus(audioOutput)),
+                SourceTypes.Spotify when _spotifyHandler.Configuration.Enable => _spotifyHandler.GetPlaybackStatusAsync(audioOutput),
+                _ => Task.FromResult(new PlaybackStatus(false, null, null, null, false, 0, 0, null, audioOutput))
+            };
         }
 
         private static async Task ApplyInitialVolumeAsync(SourceTypes source)

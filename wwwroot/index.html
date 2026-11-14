@@ -76,6 +76,22 @@
         <p class="eyebrow">PLAYBACK CONTROLS</p>
         <h2 id="controlHeading">Playback control tags</h2>
       </div>
+      <section class="now-playing-panel" aria-labelledby="nowPlayingHeading" aria-live="polite">
+        <div class="now-playing-title-row">
+          <div>
+            <p class="eyebrow">NOW PLAYING</p>
+            <h3 id="nowPlayingHeading">Nothing playing</h3>
+          </div>
+          <span id="nowPlayingState" class="now-playing-state">Idle</span>
+        </div>
+        <div class="now-playing-meta">
+          <span id="nowPlayingSource">No active tag</span>
+          <span id="nowPlayingOutput">Output unavailable</span>
+          <span id="nowPlayingVolume">Volume --</span>
+        </div>
+        <progress id="nowPlayingProgress" class="now-playing-progress" max="1000" value="0" aria-label="Track progress"></progress>
+        <div class="now-playing-time"><time id="nowPlayingElapsed">0:00</time><time id="nowPlayingDuration">0:00</time></div>
+      </section>
       <div class="web-playback-controls">
         <p class="control-label">On-screen controls</p>
         <div class="playback-button-row">
@@ -217,6 +233,7 @@
           <div class="bluetooth-tools">
             <label for="bluetoothDevicePicker">Pair a Bluetooth audio device</label>
             <div class="bluetooth-actions">
+              <button id="refreshBluetoothButton" class="button button-secondary" type="button">Refresh paired</button>
               <button id="scanBluetoothButton" class="button button-secondary" type="button">Find devices</button>
               <select id="bluetoothDevicePicker" aria-label="Bluetooth devices" disabled>
                 <option value="">Scan for devices</option>
@@ -276,6 +293,20 @@
           <input id="searchInput" type="search" placeholder="Find a tag or UID" autocomplete="off">
         </label>
         <div id="tagList" class="tag-list" aria-live="polite"></div>
+        <section class="library-backup" aria-labelledby="backupHeading">
+          <div>
+            <p class="eyebrow">PORTABILITY</p>
+            <h3 id="backupHeading">Library backup</h3>
+            <p class="field-note">Includes tags, control mappings, and settings. Media files and Spotify secrets are excluded.</p>
+          </div>
+          <div class="backup-actions">
+            <button id="downloadBackupButton" class="button button-secondary" type="button">Download backup</button>
+            <label class="upload-button" for="backupFile">Choose backup</label>
+            <input id="backupFile" class="visually-hidden" type="file" accept=".json,application/json">
+            <button id="restoreBackupButton" class="button button-secondary" type="button" disabled>Restore backup</button>
+          </div>
+          <span id="backupMessage" class="form-message" role="status" aria-live="polite"></span>
+        </section>
       </section>
 
       <section class="editor-section">
