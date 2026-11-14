@@ -69,7 +69,7 @@ function renderBluetoothDevicePicker(devices) {
     options.push(new Option(`${device.name} - ${device.address}${device.connected ? " (connected)" : device.paired ? " (paired)" : ""}`, device.address));
   }
   picker.replaceChildren(...options);
-  picker.disabled = !bluetoothManaged || devices.length === 0;
+  picker.disabled = devices.length === 0;
   updateBluetoothConnectButton();
 }
 
@@ -77,7 +77,7 @@ function updateBluetoothConnectButton() {
   const picker = document.querySelector("#bluetoothDevicePicker");
   const button = document.querySelector("#connectBluetoothButton");
   const device = bluetoothDevices.find(item => item.address === picker.value);
-  button.disabled = !bluetoothManaged || !device;
+  button.disabled = !device;
   button.textContent = device?.paired ? "Reconnect" : "Pair / connect";
 }
 
@@ -907,14 +907,17 @@ async function loadBluetoothStatus() {
   renderBluetoothDevicePicker(bluetoothDevices);
   renderAudioOutputOptions();
   document.querySelector("#bluetoothMessage").textContent = status.message ?? "";
-  document.querySelector("#scanBluetoothButton").disabled = !bluetoothManaged || status.state === "running";
+  document.querySelector("#scanBluetoothButton").disabled = status.state === "running";
+  document.querySelector("#refreshBluetoothButton").disabled = status.state === "running";
 }
 
 async function runBluetoothOperation(operation) {
   const scanButton = document.querySelector("#scanBluetoothButton");
+  const refreshButton = document.querySelector("#refreshBluetoothButton");
   const connectButton = document.querySelector("#connectBluetoothButton");
   const message = document.querySelector("#bluetoothMessage");
   scanButton.disabled = true;
+  refreshButton.disabled = true;
   connectButton.disabled = true;
   message.classList.remove("error");
   message.textContent = operation === "scan" ? "Scanning for nearby devices..."
@@ -951,8 +954,9 @@ async function runBluetoothOperation(operation) {
     message.classList.add("error");
     message.textContent = error.message;
   } finally {
-    scanButton.disabled = !bluetoothManaged;
-    connectButton.disabled = !bluetoothManaged || !document.querySelector("#bluetoothDevicePicker").value;
+    scanButton.disabled = false;
+    refreshButton.disabled = false;
+    updateBluetoothConnectButton();
   }
 }
 

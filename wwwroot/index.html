@@ -231,20 +231,20 @@
             <input id="clearSoloistApiKey" type="checkbox">
             Clear saved Soloist API key
           </label>
-          <div class="bluetooth-tools">
-            <label for="bluetoothDevicePicker">Pair a Bluetooth audio device</label>
-            <div class="bluetooth-actions">
-              <button id="refreshBluetoothButton" class="button button-secondary" type="button">Refresh paired</button>
-              <button id="scanBluetoothButton" class="button button-secondary" type="button">Find devices</button>
-              <select id="bluetoothDevicePicker" aria-label="Bluetooth devices" disabled>
-                <option value="">Scan for devices</option>
-              </select>
-              <button id="connectBluetoothButton" class="button button-secondary" type="button" disabled>Pair / connect</button>
-            </div>
-            <span id="bluetoothMessage" class="form-message" role="status" aria-live="polite">Pair a speaker or headset to make it available for tags.</span>
-          </div>
           <a class="spotify-result-link" href="https://developer.spotify.com/dashboard/soloist" target="_blank" rel="noopener noreferrer">Spotify Soloist API key dashboard ↗</a>
         </fieldset>
+        <div class="bluetooth-tools">
+          <label for="bluetoothDevicePicker">Pair a Bluetooth audio device</label>
+          <div class="bluetooth-actions">
+            <button id="refreshBluetoothButton" class="button button-secondary" type="button">Refresh paired</button>
+            <button id="scanBluetoothButton" class="button button-secondary" type="button">Find devices</button>
+            <select id="bluetoothDevicePicker" aria-label="Bluetooth devices" disabled>
+              <option value="">Scan for devices</option>
+            </select>
+            <button id="connectBluetoothButton" class="button button-secondary" type="button" disabled>Pair / connect</button>
+          </div>
+          <span id="bluetoothMessage" class="form-message" role="status" aria-live="polite">Pair a speaker or headset to make it available for tags.</span>
+        </div>
         <div class="receiver-status-row">
           <span id="receiverStatus" class="form-message" role="status" aria-live="polite">Checking Soloist receiver</span>
           <button id="refreshReceiverStatus" class="icon-button" type="button" title="Refresh receiver status" aria-label="Refresh receiver status">↻</button>
