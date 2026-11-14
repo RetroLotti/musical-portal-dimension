@@ -151,6 +151,14 @@
             }
         }
 
+        public void SetVolume(int volume)
+        {
+            lock (_playlistLock)
+            {
+                Player.Volume = Math.Clamp(volume, 0, 100);
+            }
+        }
+
         public void ToggleShuffle()
         {
             lock (_playlistLock)

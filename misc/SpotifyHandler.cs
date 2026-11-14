@@ -119,6 +119,44 @@
             }
         }
 
+        public async Task UpdateInitialVolumeAsync(int? volume, string fileName)
+        {
+            if (volume is < 0 or > 100)
+                throw new ArgumentOutOfRangeException(nameof(volume), "Initial volume must be between 0 and 100.");
+
+            await _operationLock.WaitAsync();
+            try
+            {
+                var previous = _config.InitialVolume;
+                _config.InitialVolume = volume;
+                try
+                {
+                    await SaveJsonAsync(fileName, _config);
+                }
+                catch
+                {
+                    _config.InitialVolume = previous;
+                    throw;
+                }
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
+        public async Task SetVolumeAsync(int volume)
+        {
+            if (volume is < 0 or > 100)
+                throw new ArgumentOutOfRangeException(nameof(volume), "Volume must be between 0 and 100.");
+
+            await ExecuteAsync(async spotify =>
+            {
+                var deviceId = await GetDeviceIdAsync(spotify);
+                await spotify.Player.SetVolume(new PlayerVolumeRequest(volume) { DeviceId = deviceId });
+            });
+        }
+
         public async Task<SpotifyAuthorizationStart> BeginAuthorizationAsync(string sessionId, CancellationToken cancellationToken = default)
         {
             await _operationLock.WaitAsync(cancellationToken);

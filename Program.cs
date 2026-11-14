@@ -55,7 +55,8 @@
             _portalHandler = new PortalHandler();
             _spotifyHandler = new SpotifyHandler(_config);
             var listenUrl = Environment.GetEnvironmentVariable("MUSICDIMENSION_WEB_URL") ?? "http://127.0.0.1:5080";
-            var app = MusicWebHost.Create(_musicStore, ReaderCapture, _spotifyHandler, ConfigFileName, () => _portalHandler.IsConnected, listenUrl);
+                var app = MusicWebHost.Create(_musicStore, ReaderCapture, _spotifyHandler, ConfigFileName,
+                    () => _portalHandler.IsConnected, listenUrl, ExecuteWebPlaybackControlAsync);
             await app.StartAsync();
             Console.WriteLine($"Music manager: {listenUrl}");
 
@@ -162,6 +163,8 @@
                     var pausedTag = _musicStore.Snapshot().RegisteredTags
                         .FirstOrDefault(item => string.Equals(item.Uid, uid, StringComparison.OrdinalIgnoreCase));
                     if (pausedTag != null) await SelectTagOutputAsync(pausedTag);
+                        if (_pausedPlaybackSource is SourceTypes playbackSource)
+                            await ApplyInitialVolumeAsync(playbackSource);
                     if (_pausedPlaybackSource == SourceTypes.Spotify && !_spotifyHandler.Configuration.Enable)
                     {
                         Console.WriteLine("Spotify is disabled; this tag cannot be resumed.");
@@ -277,6 +280,7 @@
                         RemoveSavedTagPlaybackState(uid);
                         await _spotifyHandler.PlayAsync(songs);
                     }
+                        await ApplyInitialVolumeAsync(SourceTypes.Spotify);
                     _portalHandler.IsTransferring = true;
                     _currentTagUid = uid;
                     _currentPlaybackSource = SourceTypes.Spotify;
@@ -315,6 +319,7 @@
                         RemoveSavedTagPlaybackState(uid);
                         _localMusicHandler.Play(localPaths);
                     }
+                        await ApplyInitialVolumeAsync(SourceTypes.Local);
                     _portalHandler.IsTransferring = true;
                     _currentTagUid = uid;
                     _currentPlaybackSource = SourceTypes.Local;
@@ -386,6 +391,40 @@
             else if (_currentPlaybackSource == SourceTypes.Local)
             {
                 _localMusicHandler.Resume();
+            }
+        }
+
+        private static async Task ExecuteWebPlaybackControlAsync(string action)
+        {
+            if (_currentPlaybackSource == null)
+                throw new InvalidOperationException("Read a music tag before using playback controls.");
+            if (_currentPlaybackSource == SourceTypes.Spotify && !_spotifyHandler.Configuration.Enable)
+                throw new InvalidOperationException("Spotify is disabled.");
+
+            switch (action)
+            {
+                case "next": await SkipTrackAsync(forward: true); break;
+                case "previous": await SkipTrackAsync(forward: false); break;
+                case "volumeup": await ChangeVolumeAsync(10); break;
+                case "volumedown": await ChangeVolumeAsync(-10); break;
+                case "shuffle": await ToggleShuffleAsync(); break;
+                default: throw new ArgumentException("Choose a supported playback action.", nameof(action));
+            }
+        }
+
+        private static async Task ApplyInitialVolumeAsync(SourceTypes source)
+        {
+            if (_config.InitialVolume is not int volume) return;
+            try
+            {
+                if (source == SourceTypes.Local)
+                    _localMusicHandler.SetVolume(volume);
+                else if (source == SourceTypes.Spotify && _spotifyHandler.Configuration.Enable)
+                    await _spotifyHandler.SetVolumeAsync(volume);
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"Could not apply initial volume {volume}: {exception.Message}");
             }
         }
 

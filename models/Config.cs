@@ -22,6 +22,9 @@
         [JsonProperty("mediaMaxFileSizeMb")]
         public int MediaMaxFileSizeMb { get; set; } = 512;
 
+        [JsonProperty("initialVolume")]
+        public int? InitialVolume { get; set; }
+
         [JsonIgnore]
         public string TokenFileName { get; set; } = null!;
     }

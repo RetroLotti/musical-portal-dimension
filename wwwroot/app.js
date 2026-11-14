@@ -172,6 +172,59 @@ async function loadMediaSettings() {
   document.querySelector("#mediaMaxFileSizeMb").value = String(mediaMaxFileSizeMb);
 }
 
+async function loadPlaybackSettings() {
+  const settings = await request("/api/settings/playback");
+  document.querySelector("#initialVolume").value = settings.initialVolume == null ? "" : String(settings.initialVolume);
+}
+
+async function savePlaybackSettings(event) {
+  event.preventDefault();
+  const input = document.querySelector("#initialVolume");
+  const message = document.querySelector("#playbackSettingsMessage");
+  const button = document.querySelector("#savePlaybackSettingsButton");
+  const initialVolume = input.value.trim() === "" ? null : Number(input.value);
+  message.textContent = "";
+  message.classList.remove("error");
+  if (initialVolume !== null && (!Number.isInteger(initialVolume) || initialVolume < 0 || initialVolume > 100)) {
+    message.textContent = "Choose a whole number between 0 and 100, or leave it blank.";
+    message.classList.add("error");
+    return;
+  }
+  button.disabled = true;
+  try {
+    const settings = await request("/api/settings/playback", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initialVolume })
+    });
+    input.value = settings.initialVolume == null ? "" : String(settings.initialVolume);
+    message.textContent = settings.initialVolume == null ? "Initial volume cleared." : `Initial volume saved at ${settings.initialVolume}%.`;
+  } catch (error) {
+    message.textContent = error.message;
+    message.classList.add("error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function sendPlaybackControl(event) {
+  const button = event.currentTarget;
+  const message = document.querySelector("#webPlaybackMessage");
+  const action = button.dataset.playbackAction;
+  button.disabled = true;
+  message.textContent = "Sending playback command...";
+  message.classList.remove("error");
+  try {
+    await request(`/api/playback/control/${action}`, { method: "POST" });
+    message.textContent = action === "shuffle" ? "Shuffle toggled." : `${button.textContent} command sent.`;
+  } catch (error) {
+    message.textContent = error.message;
+    message.classList.add("error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function saveMediaSettings(event) {
   event.preventDefault();
   const button = document.querySelector("#saveMediaSettingsButton");
@@ -1237,6 +1290,9 @@ for (const [index, tab] of sectionTabs.entries()) {
 
 document.querySelector("#spotifySettingsForm").addEventListener("submit", saveSpotifySettings);
 document.querySelector("#mediaSettingsForm").addEventListener("submit", saveMediaSettings);
+document.querySelector("#playbackSettingsForm").addEventListener("submit", savePlaybackSettings);
+for (const button of document.querySelectorAll("[data-playback-action]"))
+  button.addEventListener("click", sendPlaybackControl);
 sourceSelect.addEventListener("change", updateSourceFields);
 document.querySelector("#searchInput").addEventListener("input", renderTags);
 document.querySelector("#captureButton").addEventListener("click", event => captureUid(document.querySelector("#uidInput"), event.currentTarget));
@@ -1269,5 +1325,6 @@ document.querySelector("#refreshButton").addEventListener("click", () => refresh
 
 refresh().catch(error => showToast(error.message));
 loadMediaSettings().catch(error => showToast(error.message));
+loadPlaybackSettings().catch(error => showToast(error.message));
 loadSpotifySettings().catch(error => showToast(error.message));
 renderQueue();

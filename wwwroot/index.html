@@ -76,6 +76,17 @@
         <p class="eyebrow">PLAYBACK CONTROLS</p>
         <h2 id="controlHeading">Playback control tags</h2>
       </div>
+      <div class="web-playback-controls">
+        <p class="control-label">On-screen controls</p>
+        <div class="playback-button-row">
+          <button class="button button-secondary" type="button" data-playback-action="previous">Previous</button>
+          <button class="button button-secondary" type="button" data-playback-action="volumedown">Volume down</button>
+          <button class="button button-secondary" type="button" data-playback-action="volumeup">Volume up</button>
+          <button class="button button-secondary" type="button" data-playback-action="shuffle">Shuffle</button>
+          <button class="button button-secondary" type="button" data-playback-action="next">Next</button>
+        </div>
+        <span id="webPlaybackMessage" class="form-message" role="status" aria-live="polite">Read a music tag to enable playback controls.</span>
+      </div>
       <div class="control-fields">
         <div class="field-group">
           <label for="forwardUid">Forward to next track</label>
@@ -117,6 +128,21 @@
         <span id="controlMessage" class="form-message" role="status" aria-live="polite"></span>
         <button id="saveControlsButton" class="button button-primary" type="button">Save controls</button>
       </div>
+      <form id="playbackSettingsForm" class="playback-settings-form">
+        <div class="control-heading">
+          <p class="eyebrow">PLAYBACK DEFAULTS</p>
+          <h2>Initial volume</h2>
+        </div>
+        <div class="playback-volume-row">
+          <div class="field-group">
+            <label for="initialVolume">Volume at tag start (0–100)</label>
+            <input id="initialVolume" class="playback-volume-input" type="number" min="0" max="100" step="1" placeholder="Unchanged">
+          </div>
+          <p class="field-note">Blank keeps the current volume. Applied when a tag starts or resumes.</p>
+          <button id="savePlaybackSettingsButton" class="button button-secondary" type="submit">Save volume</button>
+        </div>
+        <span id="playbackSettingsMessage" class="form-message" role="status" aria-live="polite"></span>
+      </form>
       <form id="mediaSettingsForm" class="media-settings-form">
         <div class="control-heading">
           <p class="eyebrow">MEDIA LIBRARY</p>

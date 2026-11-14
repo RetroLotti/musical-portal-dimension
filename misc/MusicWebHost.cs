@@ -20,7 +20,7 @@ namespace MusicDimension.misc
             ".aac", ".flac", ".m4a", ".mp3", ".ogg", ".wav", ".wma", ".m3u", ".m3u8"
         };
 
-        public static WebApplication Create(MusicConfigStore store, ReaderCaptureState readerCapture, SpotifyHandler spotify, string configFileName, Func<bool> isReaderConnected, string listenUrl)
+        public static WebApplication Create(MusicConfigStore store, ReaderCaptureState readerCapture, SpotifyHandler spotify, string configFileName, Func<bool> isReaderConnected, string listenUrl, Func<string, Task> executePlaybackControlAsync)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -43,6 +43,23 @@ namespace MusicDimension.misc
             app.MapGet("/api/status", () => Results.Ok(new { spotifyEnabled = spotify.Configuration.Enable, readerConnected = isReaderConnected() }));
             app.MapGet("/api/settings/spotify", () => Results.Ok(GetSpotifySettings(spotify)));
             app.MapGet("/api/settings/media", () => Results.Ok(new MediaSettingsResponse(spotify.Configuration.MediaMaxFileSizeMb)));
+            app.MapGet("/api/settings/playback", () => Results.Ok(new PlaybackSettingsResponse(spotify.Configuration.InitialVolume)));
+            app.MapPut("/api/settings/playback", async (UpdatePlaybackSettingsRequest request) =>
+            {
+                if (request.InitialVolume is < 0 or > 100)
+                    return Results.BadRequest(new { message = "Choose an initial volume between 0 and 100, or leave it blank to keep the current volume." });
+                try
+                {
+                    await spotify.UpdateInitialVolumeAsync(request.InitialVolume, configFileName);
+                    return Results.Ok(new PlaybackSettingsResponse(spotify.Configuration.InitialVolume));
+                }
+                catch (Exception exception)
+                {
+                    return Results.Problem($"Could not save playback settings: {exception.Message}");
+                }
+            });
+            app.MapPost("/api/playback/control/{action}", (string action, HttpContext context) =>
+                ExecutePlaybackControlAsync(context, action, executePlaybackControlAsync));
             app.MapPut("/api/settings/media", async (UpdateMediaSettingsRequest request) =>
             {
                 if (request.MaxFileSizeMb is < 1 or > MaximumUploadFileSizeMb)
@@ -146,6 +163,7 @@ namespace MusicDimension.misc
                     SpotifyDeviceName = deviceName,
                     Receiver = receiver,
                     MediaMaxFileSizeMb = current.MediaMaxFileSizeMb,
+                    InitialVolume = current.InitialVolume,
                     TokenFileName = current.TokenFileName
                 };
                 try
@@ -236,6 +254,32 @@ namespace MusicDimension.misc
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
                 return Results.Problem("Could not queue the service log request. Check that the updated Pi installer is installed.");
+            }
+        }
+
+        private static async Task<IResult> ExecutePlaybackControlAsync(HttpContext context, string action, Func<string, Task> execute)
+        {
+            var origin = context.Request.Headers.Origin.ToString();
+            if (context.Request.Headers["Sec-Fetch-Site"] == "cross-site"
+                || (!string.IsNullOrEmpty(origin) && (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri)
+                    || Uri.Compare(originUri, new Uri($"{context.Request.Scheme}://{context.Request.Host}"),
+                        UriComponents.SchemeAndServer, UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)))
+                return Results.Json(new { message = "Use the playback controls from this web manager." }, statusCode: StatusCodes.Status403Forbidden);
+            if (action is not ("next" or "previous" or "volumeup" or "volumedown" or "shuffle"))
+                return Results.BadRequest(new { message = "Choose a supported playback action." });
+
+            try
+            {
+                await execute(action);
+                return Results.Ok(new { action });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { message = exception.Message });
+            }
+            catch (Exception exception)
+            {
+                return Results.Problem($"Could not run the playback action: {exception.Message}");
             }
         }
 
@@ -410,6 +454,10 @@ namespace MusicDimension.misc
 
         /// <summary>Maximum accepted media file size in MiB.</summary>
         public sealed record MediaSettingsResponse(int MaxFileSizeMb);
+
+        public sealed record PlaybackSettingsResponse(int? InitialVolume);
+
+        public sealed record UpdatePlaybackSettingsRequest(int? InitialVolume);
 
         /// <summary>Requested maximum media file size in MiB.</summary>
         public sealed record UpdateMediaSettingsRequest(int MaxFileSizeMb);
