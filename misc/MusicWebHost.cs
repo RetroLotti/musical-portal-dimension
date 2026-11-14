@@ -13,14 +13,20 @@ namespace MusicDimension.misc
     public static partial class MusicWebHost
     {
         private const int MaximumUploadFileSizeMb = 4096;
+        private const long MaximumBackupFileSizeBytes = 5 * 1024 * 1024;
         private const long MultipartOverheadBytes = 1024 * 1024;
         private static readonly long MaximumRequestSize = (long)MaximumUploadFileSizeMb * 1024 * 1024 + MultipartOverheadBytes;
         private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".aac", ".flac", ".m4a", ".mp3", ".ogg", ".wav", ".wma", ".m3u", ".m3u8"
         };
+        private static readonly JsonSerializerOptions BackupJsonOptions = new(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        };
 
-        public static WebApplication Create(MusicConfigStore store, ReaderCaptureState readerCapture, SpotifyHandler spotify, string configFileName, Func<bool> isReaderConnected, string listenUrl)
+        public static WebApplication Create(MusicConfigStore store, ReaderCaptureState readerCapture, SpotifyHandler spotify, string configFileName, Func<bool> isReaderConnected, string listenUrl, Func<string, Task> executePlaybackControlAsync, Func<Task<PlaybackStatus>> getPlaybackStatusAsync)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -40,9 +46,44 @@ namespace MusicDimension.misc
             app.UseStaticFiles();
 
             app.MapGet("/api/library", () => Results.Ok(store.Snapshot()));
+            app.MapGet("/api/backup", (HttpContext context) =>
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                var configuration = spotify.Configuration;
+                var backup = new MusicDimensionBackup(1, DateTimeOffset.UtcNow,
+                    new BackupSettings(configuration.Enable, configuration.ClientId, configuration.SpotifyDeviceName,
+                        configuration.Receiver.Enabled, configuration.Receiver.AudioDevice, configuration.Receiver.Bitrate,
+                        configuration.MediaMaxFileSizeMb, configuration.InitialVolume), store.Snapshot());
+                var bytes = JsonSerializer.SerializeToUtf8Bytes(backup, BackupJsonOptions);
+                return Results.File(bytes, "application/json", "musicdimension-backup.json");
+            });
+            app.MapPost("/api/backup", (HttpRequest request, CancellationToken cancellationToken) =>
+                RestoreBackupAsync(request, cancellationToken, store, spotify, configFileName));
             app.MapGet("/api/status", () => Results.Ok(new { spotifyEnabled = spotify.Configuration.Enable, readerConnected = isReaderConnected() }));
             app.MapGet("/api/settings/spotify", () => Results.Ok(GetSpotifySettings(spotify)));
             app.MapGet("/api/settings/media", () => Results.Ok(new MediaSettingsResponse(spotify.Configuration.MediaMaxFileSizeMb)));
+            app.MapGet("/api/settings/playback", () => Results.Ok(new PlaybackSettingsResponse(spotify.Configuration.InitialVolume)));
+            app.MapPut("/api/settings/playback", async (UpdatePlaybackSettingsRequest request) =>
+            {
+                if (request.InitialVolume is < 0 or > 100)
+                    return Results.BadRequest(new { message = "Choose an initial volume between 0 and 100, or leave it blank to keep the current volume." });
+                try
+                {
+                    await spotify.UpdateInitialVolumeAsync(request.InitialVolume, configFileName);
+                    return Results.Ok(new PlaybackSettingsResponse(spotify.Configuration.InitialVolume));
+                }
+                catch (Exception exception)
+                {
+                    return Results.Problem($"Could not save playback settings: {exception.Message}");
+                }
+            });
+            app.MapPost("/api/playback/control/{action}", (string action, HttpContext context) =>
+                ExecutePlaybackControlAsync(context, action, executePlaybackControlAsync));
+            app.MapGet("/api/playback/status", async (HttpContext context) =>
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                return Results.Ok(await getPlaybackStatusAsync());
+            });
             app.MapPut("/api/settings/media", async (UpdateMediaSettingsRequest request) =>
             {
                 if (request.MaxFileSizeMb is < 1 or > MaximumUploadFileSizeMb)
@@ -68,6 +109,7 @@ namespace MusicDimension.misc
                 return Results.Ok(BluetoothManager.GetStatus());
             });
             app.MapPost("/api/audio/bluetooth/scan", (HttpContext context) => StartBluetoothOperation(context, "scan"));
+            app.MapPost("/api/audio/bluetooth/refresh", (HttpContext context) => StartBluetoothOperation(context, "refresh"));
             app.MapPost("/api/audio/bluetooth/connect", (BluetoothConnectRequest request, HttpContext context) =>
                 StartBluetoothOperation(context, "connect", request.Address));
             app.MapGet("/api/service-logs", (HttpContext context) =>
@@ -146,6 +188,7 @@ namespace MusicDimension.misc
                     SpotifyDeviceName = deviceName,
                     Receiver = receiver,
                     MediaMaxFileSizeMb = current.MediaMaxFileSizeMb,
+                    InitialVolume = current.InitialVolume,
                     TokenFileName = current.TokenFileName
                 };
                 try
@@ -175,6 +218,129 @@ namespace MusicDimension.misc
             app.MapDelete("/api/tags/{uid}", (string uid) => DeleteTag(uid, store));
 
             return app;
+        }
+
+        private static async Task<IResult> RestoreBackupAsync(HttpRequest request, CancellationToken cancellationToken,
+            MusicConfigStore store, SpotifyHandler spotify, string configFileName)
+        {
+            if (request.ContentLength is null or <= 0 or > MaximumBackupFileSizeBytes)
+                return Results.BadRequest(new { message = "Choose a valid backup file smaller than 5 MiB." });
+
+            MusicDimensionBackup? backup;
+            try
+            {
+                backup = await JsonSerializer.DeserializeAsync<MusicDimensionBackup>(request.Body, BackupJsonOptions, cancellationToken);
+            }
+            catch (JsonException)
+            {
+                return Results.BadRequest(new { message = "The selected file is not a valid Music Dimension backup." });
+            }
+
+            if (backup?.Version != 1 || backup.Settings == null || backup.Library == null)
+                return Results.BadRequest(new { message = "The selected file is not a supported Music Dimension backup." });
+
+            var validationError = ValidateBackup(backup);
+            if (validationError != null) return Results.BadRequest(new { message = validationError });
+
+            var current = spotify.Configuration;
+            var previousLibrary = store.Snapshot();
+            var settings = backup.Settings;
+            var restoredConfiguration = new Config
+            {
+                Enable = settings.Enable,
+                ClientId = settings.ClientId!,
+                ClientSecret = current.ClientSecret,
+                SpotifyDeviceName = settings.SpotifyDeviceName!,
+                Receiver = new ReceiverConfig
+                {
+                    Enabled = settings.ReceiverEnabled,
+                    AudioDevice = settings.AudioDevice!,
+                    Bitrate = settings.Bitrate
+                },
+                MediaMaxFileSizeMb = settings.MediaMaxFileSizeMb,
+                InitialVolume = settings.InitialVolume,
+                TokenFileName = current.TokenFileName
+            };
+
+            var configurationUpdated = false;
+            try
+            {
+                await spotify.UpdateConfigurationAsync(restoredConfiguration, configFileName);
+                configurationUpdated = true;
+                store.Replace(backup.Library);
+                return Results.Ok(new { restored = true, mediaIncluded = false, secretsIncluded = false });
+            }
+            catch (Exception exception)
+            {
+                if (configurationUpdated)
+                {
+                    try { await spotify.UpdateConfigurationAsync(current, configFileName); }
+                    catch (Exception rollbackException) { Console.WriteLine($"Could not roll back config after backup restore: {rollbackException.Message}"); }
+                }
+                try { store.Replace(previousLibrary); }
+                catch (Exception rollbackException) { Console.WriteLine($"Could not roll back music.json after backup restore: {rollbackException.Message}"); }
+                return Results.Problem($"Could not restore the backup: {exception.Message}");
+            }
+        }
+
+        private static string? ValidateBackup(MusicDimensionBackup backup)
+        {
+            var settings = backup.Settings!;
+            if (settings.ClientId == null || settings.ClientId.Length > 256
+                || string.IsNullOrWhiteSpace(settings.SpotifyDeviceName) || settings.SpotifyDeviceName.Length > 100
+                || settings.SpotifyDeviceName.Any(char.IsControl)
+                || (settings.Enable && string.IsNullOrWhiteSpace(settings.ClientId)))
+                return "The backup contains invalid Spotify settings.";
+            if (settings.Bitrate is not (96 or 160 or 320)
+                || settings.AudioDevice == null || !Regex.IsMatch(settings.AudioDevice, @"\A[A-Za-z0-9_:,.\-]{1,128}\Z")
+                || settings.MediaMaxFileSizeMb is < 1 or > MaximumUploadFileSizeMb
+                || settings.InitialVolume is < 0 or > 100)
+                return "The backup contains invalid audio or media settings.";
+
+            var library = backup.Library!;
+            if (library.RegisteredTags == null || library.RegisteredTags.Count > 10000)
+                return "The backup tag library is invalid or too large.";
+            var tagUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var tag in library.RegisteredTags)
+            {
+                if (tag == null || (tag.Uid = NormalizeUid(tag.Uid) ?? "").Length == 0 || !tagUids.Add(tag.Uid)
+                    || string.IsNullOrWhiteSpace(tag.Name) || tag.Name.Length > 100)
+                    return "The backup contains an invalid tag or duplicate tag UID.";
+                tag.AudioOutput ??= "headphones";
+                if (!string.Equals(tag.AudioOutput, "headphones", StringComparison.OrdinalIgnoreCase)
+                    && !Regex.IsMatch(tag.AudioOutput, @"\Abluetooth:(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\Z"))
+                    return $"Tag {tag.Uid} has an invalid audio output.";
+                if (tag.Songs == null || tag.Songs.Count is < 1 or > 100)
+                    return $"Tag {tag.Uid} has an invalid song list.";
+                if (tag.Songs.Any(song => song == null))
+                    return $"Tag {tag.Uid} contains an empty song entry.";
+
+                var source = tag.Songs[0].Type;
+                if (source is not (SourceTypes.Local or SourceTypes.Spotify) || tag.Songs.Any(song => song.Type != source))
+                    return $"Tag {tag.Uid} mixes unsupported playback sources.";
+                if (source == SourceTypes.Local && tag.Songs.Any(song => GetLocalMediaPath(song.Path) == null))
+                    return $"Tag {tag.Uid} has an invalid media path.";
+                if (source == SourceTypes.Spotify && (tag.Songs.Count > 1 && tag.Songs.Any(song => song.SpotifyType != SpotifyTypes.Track)
+                    || tag.Songs.Any(song => song.SpotifyType == null || !Enum.IsDefined(song.SpotifyType.Value)
+                        || string.IsNullOrWhiteSpace(song.SpotifyId) || !Regex.IsMatch(song.SpotifyId, @"\A[A-Za-z0-9]{1,128}\Z"))))
+                    return $"Tag {tag.Uid} has invalid Spotify items.";
+            }
+
+            if (library.ControlTags == null || library.ControlTags.Count > 10000)
+                return "The backup control-tag map is invalid.";
+            var normalizedControls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var validActions = new HashSet<string>(["next", "previous", "volumeup", "volumedown", "shuffle", "stop", "pause", "play"], StringComparer.Ordinal);
+            foreach (var (uid, action) in library.ControlTags)
+            {
+                var normalizedUid = NormalizeUid(uid);
+                if (normalizedUid == null || string.IsNullOrWhiteSpace(action))
+                    return "The backup contains an invalid control-tag assignment.";
+                var normalizedAction = MusicConfigStore.NormalizeControlAction(action);
+                if (!validActions.Contains(normalizedAction) || !normalizedControls.TryAdd(normalizedUid, normalizedAction))
+                    return "The backup contains an invalid control-tag assignment.";
+            }
+            library.ControlTags = normalizedControls;
+            return null;
         }
 
         private static SpotifySettingsResponse GetSpotifySettings(SpotifyHandler spotify)
@@ -236,6 +402,32 @@ namespace MusicDimension.misc
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
                 return Results.Problem("Could not queue the service log request. Check that the updated Pi installer is installed.");
+            }
+        }
+
+        private static async Task<IResult> ExecutePlaybackControlAsync(HttpContext context, string action, Func<string, Task> execute)
+        {
+            var origin = context.Request.Headers.Origin.ToString();
+            if (context.Request.Headers["Sec-Fetch-Site"] == "cross-site"
+                || (!string.IsNullOrEmpty(origin) && (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri)
+                    || Uri.Compare(originUri, new Uri($"{context.Request.Scheme}://{context.Request.Host}"),
+                        UriComponents.SchemeAndServer, UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)))
+                return Results.Json(new { message = "Use the playback controls from this web manager." }, statusCode: StatusCodes.Status403Forbidden);
+            if (action is not ("next" or "previous" or "volumeup" or "volumedown" or "shuffle"))
+                return Results.BadRequest(new { message = "Choose a supported playback action." });
+
+            try
+            {
+                await execute(action);
+                return Results.Ok(new { action });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { message = exception.Message });
+            }
+            catch (Exception exception)
+            {
+                return Results.Problem($"Could not run the playback action: {exception.Message}");
             }
         }
 
@@ -410,6 +602,10 @@ namespace MusicDimension.misc
 
         /// <summary>Maximum accepted media file size in MiB.</summary>
         public sealed record MediaSettingsResponse(int MaxFileSizeMb);
+
+        public sealed record PlaybackSettingsResponse(int? InitialVolume);
+
+        public sealed record UpdatePlaybackSettingsRequest(int? InitialVolume);
 
         /// <summary>Requested maximum media file size in MiB.</summary>
         public sealed record UpdateMediaSettingsRequest(int MaxFileSizeMb);

@@ -18,6 +18,7 @@ SERVICES = {
     "receiver": "musicdimension-receiver.service",
     "bluetooth": "musicdimension-bluetooth.service",
     "bluetooth-daemon": "bluetooth.service",
+    "power": None,
 }
 SECRET_PATTERN = re.compile(
     r"(?i)\b(api[-_ ]?key|client[-_ ]?secret|access[-_ ]?token|refresh[-_ ]?token|authorization)\b"
@@ -51,7 +52,39 @@ def redact_logs(content):
     return SECRET_PATTERN.sub(lambda match: match.group(1) + match.group(2) + "[REDACTED]", content)
 
 
+def read_power_status():
+    try:
+        result = subprocess.run(["/usr/bin/vcgencmd", "get_throttled"], capture_output=True, text=True, timeout=5, check=False)
+    except FileNotFoundError as exception:
+        raise RuntimeError("vcgencmd is unavailable on this Raspberry Pi OS installation") from exception
+    if result.returncode != 0:
+        raise RuntimeError("vcgencmd could not read Raspberry Pi power status")
+    match = re.fullmatch(r"\s*throttled=0x([0-9a-fA-F]+)\s*", result.stdout)
+    if not match:
+        raise RuntimeError("vcgencmd returned an unrecognized power-status value")
+
+    flags = int(match.group(1), 16)
+    lines = ["Raspberry Pi firmware power status"]
+    for label, current_bit, historical_bit in (
+        ("Under-voltage", 0, 16),
+        ("ARM frequency capped", 1, 17),
+        ("CPU throttled", 2, 18),
+        ("Soft temperature limit", 3, 19),
+    ):
+        current = bool(flags & (1 << current_bit))
+        historical = bool(flags & (1 << historical_bit))
+        lines.append(f"{label}: current={'yes' if current else 'no'}, since boot={'yes' if historical else 'no'}")
+
+    core = subprocess.run(["/usr/bin/vcgencmd", "measure_volts", "core"], capture_output=True, text=True, timeout=5, check=False)
+    if core.returncode == 0 and core.stdout.strip():
+        lines.append(f"SoC core voltage reading: {core.stdout.strip()}")
+    lines.append("Note: SoC core voltage is not the 5 V input rail; firmware reports input power via the under-voltage flags above.")
+    return "\n".join(lines) + "\n"
+
+
 def read_logs(service, lines):
+    if service == "power":
+        return read_power_status()
     result = subprocess.run(
         [JOURNALCTL, "--unit", SERVICES[service], "--lines", str(lines), "--no-pager", "--output=short-iso-precise"],
         capture_output=True, text=True, timeout=15, check=False

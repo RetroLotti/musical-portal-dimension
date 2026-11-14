@@ -66,6 +66,20 @@ class BluetoothHelperTests(unittest.TestCase):
         self.assertEqual(status["state"], "error")
         self.assertIn("No Bluetooth controller is available", status["message"])
 
+    def test_refresh_lists_paired_devices_without_scanning(self):
+        address = "AA:BB:CC:DD:EE:FF"
+        self.request.write_text(json.dumps({"requestId": "a7", "operation": "refresh"}))
+        with patch.object(bluetooth, "run_bluetoothctl", side_effect=[
+            subprocess.CompletedProcess([], 0, f"Device {address} Speaker\n", ""),
+            subprocess.CompletedProcess([], 0, "Alias: Speaker\nPaired: yes\nConnected: no\n", ""),
+        ]) as run:
+            bluetooth.main()
+        status = json.loads(self.status.read_text())
+        self.assertEqual(status["state"], "complete")
+        self.assertEqual(status["devices"][0]["address"], address)
+        self.assertTrue(status["devices"][0]["paired"])
+        self.assertTrue(all("scan" not in call.args[0] for call in run.call_args_list))
+
     def test_empty_scan_reports_pairing_mode_guidance(self):
         self.request.write_text(json.dumps({"requestId": "a6", "operation": "scan"}))
         with patch.object(bluetooth, "run_bluetoothctl", side_effect=[

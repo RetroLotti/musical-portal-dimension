@@ -119,6 +119,67 @@
             }
         }
 
+        public async Task UpdateInitialVolumeAsync(int? volume, string fileName)
+        {
+            if (volume is < 0 or > 100)
+                throw new ArgumentOutOfRangeException(nameof(volume), "Initial volume must be between 0 and 100.");
+
+            await _operationLock.WaitAsync();
+            try
+            {
+                var previous = _config.InitialVolume;
+                _config.InitialVolume = volume;
+                try
+                {
+                    await SaveJsonAsync(fileName, _config);
+                }
+                catch
+                {
+                    _config.InitialVolume = previous;
+                    throw;
+                }
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
+        public async Task SetVolumeAsync(int volume)
+        {
+            if (volume is < 0 or > 100)
+                throw new ArgumentOutOfRangeException(nameof(volume), "Volume must be between 0 and 100.");
+
+            await ExecuteAsync(async spotify =>
+            {
+                var deviceId = await GetDeviceIdAsync(spotify);
+                await spotify.Player.SetVolume(new PlayerVolumeRequest(volume) { DeviceId = deviceId });
+            });
+        }
+
+        public async Task<PlaybackStatus> GetPlaybackStatusAsync(string? audioOutput)
+        {
+            PlaybackStatus? status = null;
+            await ExecuteAsync(async spotify =>
+            {
+                var playback = await spotify.Player.GetCurrentPlayback();
+                if (playback?.Device == null
+                    || !string.Equals(playback.Device.Name, _config.SpotifyDeviceName, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                var (trackName, durationMs) = playback.Item switch
+                {
+                    FullTrack track => (track.Name, (long)track.DurationMs),
+                    FullEpisode episode => (episode.Name, (long)episode.DurationMs),
+                    _ => (null, 0L)
+                };
+                if (trackName == null) return;
+                status = new(true, "spotify", trackName, playback.Device.Name, playback.IsPlaying,
+                    Math.Max(0, playback.ProgressMs), Math.Max(0, durationMs), playback.Device.VolumePercent, audioOutput);
+            });
+            return status ?? new(false, null, null, null, false, 0, 0, null, audioOutput);
+        }
+
         public async Task<SpotifyAuthorizationStart> BeginAuthorizationAsync(string sessionId, CancellationToken cancellationToken = default)
         {
             await _operationLock.WaitAsync(cancellationToken);

@@ -21,7 +21,7 @@ def read_request():
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 4096:
             raise ValueError("Invalid Bluetooth request")
         request = json.loads(source.read(4097))
-    if not isinstance(request, dict) or request.get("operation") not in ("scan", "connect"):
+    if not isinstance(request, dict) or request.get("operation") not in ("scan", "refresh", "connect"):
         raise ValueError("Invalid Bluetooth operation")
     request_id = request.get("requestId")
     if not isinstance(request_id, str) or not re.fullmatch(r"[A-Fa-f0-9-]{1,64}", request_id):
@@ -49,8 +49,8 @@ def device_info(address):
             "connected": fields.get("Connected") == "yes"}
 
 
-def known_device_addresses():
-    result = run_bluetoothctl("devices")
+def known_device_addresses(paired_only=False):
+    result = run_bluetoothctl("devices", "Paired") if paired_only else run_bluetoothctl("devices")
     addresses = []
     for line in result.stdout.splitlines():
         match = re.match(r"^Device ((?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})(?:\s|$)", line)
@@ -93,6 +93,10 @@ def scan_devices():
     return [device_info(address) for address in addresses[:40]]
 
 
+def refresh_paired_devices():
+    return [device_info(address) for address in known_device_addresses(paired_only=True)[:40]]
+
+
 def connect_device(address):
     run_bluetoothctl("power", "on")
     if not device_info(address)["paired"]:
@@ -133,6 +137,9 @@ def main():
             status["message"] = "Scan complete. Pair a device before assigning it to a tag." if status["devices"] else (
                 "No devices found. Put the speaker in pairing mode, move it near the Pi, and scan again."
             )
+        elif request["operation"] == "refresh":
+            status["devices"] = refresh_paired_devices()
+            status["message"] = "Paired-device status refreshed." if status["devices"] else "No paired Bluetooth devices found."
         else:
             status["devices"] = connect_device(request["address"])
             status["message"] = "Bluetooth device paired and connected."
