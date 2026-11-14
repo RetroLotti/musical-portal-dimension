@@ -61,11 +61,36 @@ def known_device_addresses():
     return addresses
 
 
+def addresses_from_scan(output):
+    addresses = []
+    for line in output.splitlines():
+        match = re.search(r"(?:\[[^]]+\]\s*)*Device ((?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})(?:\s|$)", line.strip())
+        if match and match.group(1).upper() not in addresses:
+            addresses.append(match.group(1).upper())
+        if len(addresses) >= 40:
+            break
+    return addresses
+
+
 def scan_devices():
-    run_bluetoothctl("power", "on")
-    run_bluetoothctl("--timeout", "10", "scan", "on", timeout=15)
-    run_bluetoothctl("scan", "off")
-    return [device_info(address) for address in known_device_addresses()]
+    controller = run_bluetoothctl("show")
+    controller_output = controller.stdout + controller.stderr
+    if controller.returncode != 0 or "No default controller available" in controller_output:
+        raise RuntimeError("No Bluetooth controller is available. Check that the Pi has a Bluetooth adapter and bluetooth.service is running.")
+    if not re.search(r"^\s*Powered:\s*yes\s*$", controller_output, re.MULTILINE):
+        powered = run_bluetoothctl("power", "on")
+        controller = run_bluetoothctl("show")
+        controller_output = controller.stdout + controller.stderr
+        if powered.returncode != 0 or not re.search(r"^\s*Powered:\s*yes\s*$", controller_output, re.MULTILINE):
+            raise RuntimeError("The Bluetooth controller could not be powered on. Check for an rfkill block or adapter problem.")
+
+    scan = run_bluetoothctl("--timeout", "10", "scan", "on", timeout=15)
+    scan_output = scan.stdout + "\n" + scan.stderr
+    if "No default controller available" in scan_output:
+        raise RuntimeError("The Bluetooth controller disappeared during scanning. Check bluetooth.service and the adapter.")
+    addresses = addresses_from_scan(scan_output)
+    addresses.extend(address for address in known_device_addresses() if address not in addresses)
+    return [device_info(address) for address in addresses[:40]]
 
 
 def connect_device(address):
@@ -105,7 +130,9 @@ def main():
     try:
         if request["operation"] == "scan":
             status["devices"] = scan_devices()
-            status["message"] = "Scan complete. Pair a device before assigning it to a tag."
+            status["message"] = "Scan complete. Pair a device before assigning it to a tag." if status["devices"] else (
+                "No devices found. Put the speaker in pairing mode, move it near the Pi, and scan again."
+            )
         else:
             status["devices"] = connect_device(request["address"])
             status["message"] = "Bluetooth device paired and connected."

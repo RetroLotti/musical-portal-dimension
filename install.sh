@@ -48,7 +48,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     pulseaudio-utils \
     bluez \
     alsa-utils \
-    vlc-plugin-pulse \
     libatomic1 \
     libnss3 \
     libglib2.0-0 \

@@ -166,6 +166,8 @@ class ReceiverConfigurationTests(unittest.TestCase):
         installer = (ROOT / "install.sh").read_text()
         self.assertIn("pulseaudio-module-bluetooth", installer)
         self.assertIn("musicdimension-bluetooth.path", installer)
+        self.assertIn("vlc-plugin-base", installer)
+        self.assertNotIn("vlc-plugin-pulse", installer)
 
     def test_invalid_key_rejected(self):
         for key in ("private\nkey", "x" * 4097, {"unexpected": "object"}):
