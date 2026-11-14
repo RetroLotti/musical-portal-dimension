@@ -37,7 +37,39 @@
       <button id="libraryTab" class="section-tab" type="button" role="tab" aria-selected="true" aria-controls="libraryPanel">Tags &amp; music</button>
       <button id="controlsTab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="controlsPanel" tabindex="-1">Playback controls</button>
       <button id="spotifyTab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="spotifyPanel" tabindex="-1">Spotify settings</button>
+      <button id="logsTab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="logsPanel" tabindex="-1">Service logs</button>
     </div>
+
+    <section id="logsPanel" class="logs-panel tab-panel" role="tabpanel" aria-labelledby="logsTab" tabindex="0" hidden>
+      <div class="control-heading">
+        <p class="eyebrow">SYSTEM JOURNAL</p>
+        <h2>Service logs</h2>
+      </div>
+      <div class="service-log-toolbar">
+        <div class="field-group">
+          <label for="logService">Service</label>
+          <select id="logService">
+            <option value="app">Music Dimension app</option>
+            <option value="audio">Private audio</option>
+            <option value="soloist">Spotify Soloist</option>
+            <option value="receiver">Receiver configuration</option>
+            <option value="bluetooth">Bluetooth pairing</option>
+            <option value="bluetooth-daemon">Bluetooth daemon</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="logLineCount">Recent entries</label>
+          <select id="logLineCount">
+            <option value="50">50 lines</option>
+            <option value="100" selected>100 lines</option>
+            <option value="200">200 lines</option>
+          </select>
+        </div>
+        <button id="loadServiceLogsButton" class="button button-secondary" type="button">Load logs</button>
+      </div>
+      <span id="serviceLogsMessage" class="form-message" role="status" aria-live="polite">Choose a service and load its recent logs.</span>
+      <pre id="serviceLogsOutput" class="service-log-output" aria-label="Service log output"></pre>
+    </section>
 
     <section id="controlsPanel" class="control-section tab-panel" role="tabpanel" aria-labelledby="controlsTab" tabindex="0" hidden>
       <div class="control-heading">
