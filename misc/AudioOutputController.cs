@@ -1,12 +1,15 @@
 namespace MusicDimension.misc
 {
     using System.Diagnostics;
+    using System.Security.Cryptography;
+    using System.Text;
     using System.Text.RegularExpressions;
 
     public static class AudioOutputController
     {
         private const string PulseServer = "unix:/run/musicdimension-audio/native";
         private static readonly Regex BluetoothSinkPattern = new(@"\Abluez_(?:output|sink)\.(?<address>[0-9A-Fa-f_]+)\.", RegexOptions.Compiled);
+        private static readonly Regex AlsaDevicePattern = new(@"\A(?:plughw|hw|sysdefault|front|surround21|surround40|surround41|surround50|surround51|surround71):[A-Za-z0-9_:,.\-]{1,128}\Z", RegexOptions.Compiled);
 
         public static async Task<bool> IsBluetoothSinkAvailableAsync(string address)
         {
@@ -34,6 +37,7 @@ namespace MusicDimension.misc
 
             var sink = "musicdimension";
             var bluetoothRequested = output?.StartsWith("bluetooth:", StringComparison.OrdinalIgnoreCase) == true;
+            var alsaRequested = output?.StartsWith("alsa:", StringComparison.OrdinalIgnoreCase) == true;
             try
             {
                 if (bluetoothRequested)
@@ -53,6 +57,13 @@ namespace MusicDimension.misc
                             normalizedAddress, StringComparison.OrdinalIgnoreCase),
                         "PulseAudio did not create an A2DP output for the connected device.");
                 }
+                else if (alsaRequested)
+                {
+                    var device = output![5..];
+                    if (!AlsaOutputManager.IsValidDevice(device))
+                        throw new InvalidOperationException("Invalid ALSA output device.");
+                    sink = await EnsureAlsaSinkAsync(device);
+                }
 
                 await RunPactlAsync("set-default-sink", sink);
                 await MoveSinkInputsAsync(sink);
@@ -62,13 +73,13 @@ namespace MusicDimension.misc
             catch (Exception exception) when (exception is InvalidOperationException or IOException or TimeoutException or System.ComponentModel.Win32Exception)
             {
                 Console.WriteLine($"Could not select audio output '{output}': {exception.Message}");
-                if (bluetoothRequested)
+                if (bluetoothRequested || alsaRequested)
                 {
                     try
                     {
                         await RunPactlAsync("set-default-sink", "musicdimension");
                         await MoveSinkInputsAsync("musicdimension");
-                        Console.WriteLine("Using the headphone output after Bluetooth sink selection failed.");
+                        Console.WriteLine("Using the Pi configured output after the selected output failed.");
                         return false;
                     }
                     catch (Exception fallbackException) when (fallbackException is InvalidOperationException or IOException or TimeoutException or System.ComponentModel.Win32Exception)
@@ -92,6 +103,20 @@ namespace MusicDimension.misc
                 if (attempt < 39) await Task.Delay(TimeSpan.FromMilliseconds(500));
             }
             throw new InvalidOperationException(unavailableMessage);
+        }
+
+        private static async Task<string> EnsureAlsaSinkAsync(string device)
+        {
+            var suffix = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(device)))[..12].ToLowerInvariant();
+            var sink = "musicdimension_alsa_" + suffix;
+            var sinks = await RunPactlAsync("list", "short", "sinks");
+            if (sinks.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Split('\t', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                .Any(name => string.Equals(name, sink, StringComparison.Ordinal)))
+                return sink;
+
+            await RunPactlAsync("load-module", "module-alsa-sink", "device=" + device, "sink_name=" + sink);
+            return sink;
         }
 
         private static async Task MoveSinkInputsAsync(string sink)

@@ -23,6 +23,7 @@ let editingUid = null;
 let spotifyEnabled = false;
 let bluetoothDevices = [];
 let bluetoothManaged = false;
+let alsaDevices = [];
 let mediaMaxFileSizeMb = 512;
 let selectedMediaPaths = new Set();
 let toastTimer;
@@ -48,6 +49,10 @@ function showToast(message) {
 function audioOutputName(value) {
   if (value === "default") return `Global default (${audioOutputName(document.querySelector("#defaultAudioOutput")?.value || "headphones")})`;
   if (!value || value === "headphones") return "Pi headphone jack";
+  if (value.startsWith("alsa:")) {
+    const device = value.slice(5);
+    return alsaDevices.find(item => item.id === device)?.name || `ALSA ${device}`;
+  }
   const address = value.replace(/^bluetooth:/i, "");
   return bluetoothDevices.find(device => device.address.toLowerCase() === address.toLowerCase())?.name || `Bluetooth ${address}`;
 }
@@ -62,6 +67,7 @@ function renderAudioOutputOptions(selected = document.querySelector("#audioOutpu
   for (const device of bluetoothDevices.filter(item => item.paired)) {
     options.push(new Option(`${device.name}${device.connected ? " (connected)" : ""}`, `bluetooth:${device.address}`));
   }
+  for (const device of alsaDevices) options.push(new Option(device.name, `alsa:${device.id}`));
   if (selected !== "headphones" && selected !== "default" && !options.some(option => option.value === selected))
     options.push(new Option(`${audioOutputName(selected)} (not connected)`, selected));
   picker.replaceChildren(...options);
@@ -74,6 +80,7 @@ function renderDefaultAudioOutputOptions(selected = document.querySelector("#def
   for (const device of bluetoothDevices.filter(item => item.paired)) {
     options.push(new Option(`${device.name}${device.connected ? " (connected)" : ""}`, `bluetooth:${device.address}`));
   }
+  for (const device of alsaDevices) options.push(new Option(device.name, `alsa:${device.id}`));
   if (selected !== "headphones" && !options.some(option => option.value === selected))
     options.push(new Option(`${audioOutputName(selected)} (not connected)`, selected));
   picker.replaceChildren(...options);
@@ -935,9 +942,13 @@ async function loadReceiverStatus() {
 }
 
 async function loadBluetoothStatus() {
-  const status = await request("/api/audio/bluetooth");
+  const [status, outputs] = await Promise.all([
+    request("/api/audio/bluetooth"),
+    request("/api/audio/alsa")
+  ]);
   bluetoothManaged = status.managed;
   bluetoothDevices = status.devices ?? [];
+  alsaDevices = outputs ?? [];
   renderBluetoothDevicePicker(bluetoothDevices);
   renderDefaultAudioOutputOptions();
   renderAudioOutputOptions();

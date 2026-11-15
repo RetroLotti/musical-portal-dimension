@@ -114,6 +114,11 @@ namespace MusicDimension.misc
                 context.Response.Headers.CacheControl = "no-store";
                 return Results.Ok(BluetoothManager.GetStatus());
             });
+            app.MapGet("/api/audio/alsa", async (HttpContext context) =>
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                return Results.Ok(await AlsaOutputManager.GetOutputsAsync());
+            });
             app.MapPost("/api/audio/bluetooth/scan", (HttpContext context) => StartBluetoothOperation(context, "scan"));
             app.MapPost("/api/audio/bluetooth/refresh", (HttpContext context) => StartBluetoothOperation(context, "refresh"));
             app.MapPost("/api/audio/bluetooth/connect", (BluetoothConnectRequest request, HttpContext context) =>
@@ -364,7 +369,8 @@ namespace MusicDimension.misc
 
         private static bool IsValidAudioOutput(string? output) =>
             string.Equals(output, "headphones", StringComparison.OrdinalIgnoreCase)
-            || (output != null && Regex.IsMatch(output, @"\Abluetooth:(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\Z"));
+            || (output != null && Regex.IsMatch(output, @"\Abluetooth:(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\Z"))
+            || (output?.StartsWith("alsa:", StringComparison.OrdinalIgnoreCase) == true && AlsaOutputManager.IsValidDevice(output[5..]));
 
         private static string GetApplicationVersion()
         {
