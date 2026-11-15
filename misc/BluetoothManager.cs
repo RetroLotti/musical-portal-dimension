@@ -57,7 +57,13 @@ namespace MusicDimension.misc
 
         public static async Task<bool> EnsureConnectedAsync(string address, CancellationToken cancellationToken = default)
         {
-            if (!IsManaged || !AddressPattern.IsMatch(address)) return false;
+            if (!AddressPattern.IsMatch(address)) return false;
+            if (await AudioOutputController.IsBluetoothSinkAvailableAsync(address))
+            {
+                Console.WriteLine($"PulseAudio Bluetooth sink for {address} is already available.");
+                return true;
+            }
+            if (!IsManaged) return false;
 
             if (!await WaitForIdleAsync(cancellationToken))
             {

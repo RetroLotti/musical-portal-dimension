@@ -8,6 +8,26 @@ namespace MusicDimension.misc
         private const string PulseServer = "unix:/run/musicdimension-audio/native";
         private static readonly Regex BluetoothSinkPattern = new(@"\Abluez_(?:output|sink)\.(?<address>[0-9A-Fa-f_]+)\.", RegexOptions.Compiled);
 
+        public static async Task<bool> IsBluetoothSinkAvailableAsync(string address)
+        {
+            if (!OperatingSystem.IsLinux() || !Regex.IsMatch(address, @"\A(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\Z")) return false;
+            try
+            {
+                var sinks = await RunPactlAsync("list", "short", "sinks");
+                var normalizedAddress = address.Replace(':', '_');
+                return sinks.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(line => line.Split('\t', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                    .Any(name => name != null && BluetoothSinkPattern.IsMatch(name)
+                        && string.Equals(BluetoothSinkPattern.Match(name).Groups["address"].Value,
+                            normalizedAddress, StringComparison.OrdinalIgnoreCase));
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or IOException or TimeoutException or System.ComponentModel.Win32Exception)
+            {
+                Console.WriteLine($"Could not check PulseAudio for Bluetooth sink {address}: {exception.Message}");
+                return false;
+            }
+        }
+
         public static async Task<bool> SelectAsync(string? output)
         {
             if (!OperatingSystem.IsLinux()) return true;
