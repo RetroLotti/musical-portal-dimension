@@ -58,26 +58,64 @@ namespace MusicDimension.misc
         public static async Task<bool> EnsureConnectedAsync(string address, CancellationToken cancellationToken = default)
         {
             if (!IsManaged || !AddressPattern.IsMatch(address)) return false;
-            string requestId;
-            try
+
+            if (!await WaitForIdleAsync(cancellationToken))
             {
-                requestId = StartOperation("connect", address);
-            }
-            catch (InvalidOperationException)
-            {
+                Console.WriteLine("Bluetooth setup is still busy; cannot refresh the paired device before playback.");
                 return false;
             }
 
+            var refreshRequestId = StartOperation("refresh");
+            var connected = await WaitForConnectionStatusAsync(address, refreshRequestId, 20, cancellationToken);
+            if (connected == true)
+            {
+                Console.WriteLine($"Bluetooth device {address} is already connected.");
+                return true;
+            }
+
+            if (connected == null)
+            {
+                Console.WriteLine($"Could not refresh paired-device status for {address}.");
+                return false;
+            }
+
+            if (!await WaitForIdleAsync(cancellationToken))
+            {
+                Console.WriteLine("Bluetooth status refresh is still busy; cannot reconnect before playback.");
+                return false;
+            }
+
+            var connectRequestId = StartOperation("connect", address);
+            var reconnected = await WaitForConnectionStatusAsync(address, connectRequestId, 120, cancellationToken);
+            if (reconnected != true)
+                Console.WriteLine($"Bluetooth device {address} did not reconnect before playback.");
+            return reconnected == true;
+        }
+
+        private static async Task<bool> WaitForIdleAsync(CancellationToken cancellationToken)
+        {
             for (var attempt = 0; attempt < 120; attempt++)
+            {
+                if (GetStatus().State != "running") return true;
+                await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            }
+            return false;
+        }
+
+        private static async Task<bool?> WaitForConnectionStatusAsync(string address, string requestId, int attempts,
+            CancellationToken cancellationToken)
+        {
+            for (var attempt = 0; attempt < attempts; attempt++)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
                 var status = GetStatus();
                 if (!string.Equals(status.RequestId, requestId, StringComparison.Ordinal)) continue;
                 if (status.State == "error") return false;
                 if (status.State == "complete")
-                    return status.Devices.Any(device => string.Equals(device.Address, address, StringComparison.OrdinalIgnoreCase) && device.Connected);
+                    return status.Devices.Any(device => string.Equals(device.Address, address, StringComparison.OrdinalIgnoreCase)
+                        && device.Connected);
             }
-            return false;
+            return null;
         }
     }
 
