@@ -62,14 +62,14 @@ namespace MusicDimension.misc
 
         private static async Task<string> WaitForBluetoothObjectAsync(string objectType, Func<string, bool> matches, string unavailableMessage)
         {
-            for (var attempt = 0; attempt < 10; attempt++)
+            for (var attempt = 0; attempt < 40; attempt++)
             {
                 var output = await RunPactlAsync("list", "short", objectType);
                 var match = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
                     .Select(line => line.Split('\t', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
                     .FirstOrDefault(name => name != null && matches(name));
                 if (match != null) return match;
-                if (attempt < 9) await Task.Delay(TimeSpan.FromMilliseconds(500));
+                if (attempt < 39) await Task.Delay(TimeSpan.FromMilliseconds(500));
             }
             throw new InvalidOperationException(unavailableMessage);
         }
