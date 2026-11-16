@@ -6,7 +6,7 @@ namespace MusicDimension.misc
     public static class AlsaOutputManager
     {
         private static readonly Regex DevicePattern = new(
-            @"\A(?:plughw|hw):[0-9]{1,3},[0-9]{1,3}\Z",
+            @"\A(?:plughw|hw|sysdefault|front|surround21|surround40|surround41|surround50|surround51|surround71):[A-Za-z0-9_:,.=\-]{1,128}\Z",
             RegexOptions.Compiled);
         private static readonly Regex PlaybackDeviceLine = new(
             @"\A\s*card\s+(?<card>[0-9]+):\s*[^\[]+\[(?<cardName>[^\]]+)\],\s*device\s+(?<device>[0-9]+):\s*[^\[]+\[(?<deviceName>[^\]]+)\]\s*\Z",

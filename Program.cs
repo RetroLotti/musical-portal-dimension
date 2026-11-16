@@ -482,7 +482,7 @@
                 return;
             }
             if (!await AudioOutputController.SelectAsync(audioOutput))
-                Console.WriteLine($"Bluetooth output for tag {tag.Uid} is unavailable; using the headphone output.");
+                Console.WriteLine($"Selected output '{audioOutput}' for tag {tag.Uid} is unavailable; attempted the Pi configured fallback.");
         }
 
         private static void RemoveSavedTagPlaybackState(string uid)

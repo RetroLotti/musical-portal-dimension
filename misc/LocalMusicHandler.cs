@@ -29,7 +29,7 @@
             Library = options.Count == 0 ? new LibVLC() : new LibVLC(options.ToArray());
             Player = new MediaPlayer(Library);
             Player.EndReached += (_, _) => _ = Task.Run(PlayNextTrack);
-            Player.Playing += (_, _) => ApplyPendingSeek();
+            Player.Playing += (_, _) => _ = Task.Run(ApplyPendingSeek);
         }
 
         public void Play(string track)

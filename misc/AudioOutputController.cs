@@ -3,13 +3,13 @@ namespace MusicDimension.misc
     using System.Diagnostics;
     using System.Security.Cryptography;
     using System.Text;
+    using System.Text.Json;
     using System.Text.RegularExpressions;
 
     public static class AudioOutputController
     {
         private const string PulseServer = "unix:/run/musicdimension-audio/native";
         private static readonly Regex BluetoothSinkPattern = new(@"\Abluez_(?:output|sink)\.(?<address>[0-9A-Fa-f_]+)\.", RegexOptions.Compiled);
-        private static readonly Regex AlsaDevicePattern = new(@"\A(?:plughw|hw|sysdefault|front|surround21|surround40|surround41|surround50|surround51|surround71):[A-Za-z0-9_:,.\-]{1,128}\Z", RegexOptions.Compiled);
 
         public static async Task<bool> IsBluetoothSinkAvailableAsync(string address)
         {
@@ -19,7 +19,7 @@ namespace MusicDimension.misc
                 var sinks = await RunPactlAsync("list", "short", "sinks");
                 var normalizedAddress = address.Replace(':', '_');
                 return sinks.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(line => line.Split('\t', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                    .Select(GetObjectName)
                     .Any(name => name != null && BluetoothSinkPattern.IsMatch(name)
                         && string.Equals(BluetoothSinkPattern.Match(name).Groups["address"].Value,
                             normalizedAddress, StringComparison.OrdinalIgnoreCase));
@@ -97,7 +97,7 @@ namespace MusicDimension.misc
             {
                 var output = await RunPactlAsync("list", "short", objectType);
                 var match = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(line => line.Split('\t', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                    .Select(GetObjectName)
                     .FirstOrDefault(name => name != null && matches(name));
                 if (match != null) return match;
                 if (attempt < 39) await Task.Delay(TimeSpan.FromMilliseconds(500));
@@ -107,16 +107,41 @@ namespace MusicDimension.misc
 
         private static async Task<string> EnsureAlsaSinkAsync(string device)
         {
+            var sinkDetails = await RunPactlAsync("--format=json", "list", "sinks");
+            var existingSink = FindAlsaSink(sinkDetails, device);
+            if (existingSink != null) return existingSink;
+
             var suffix = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(device)))[..12].ToLowerInvariant();
             var sink = "musicdimension_alsa_" + suffix;
             var sinks = await RunPactlAsync("list", "short", "sinks");
             if (sinks.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .Select(line => line.Split('\t', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                .Select(GetObjectName)
                 .Any(name => string.Equals(name, sink, StringComparison.Ordinal)))
                 return sink;
 
             await RunPactlAsync("load-module", "module-alsa-sink", "device=" + device, "sink_name=" + sink);
             return sink;
+        }
+
+        private static string? FindAlsaSink(string sinkDetails, string device)
+        {
+            using var document = JsonDocument.Parse(sinkDetails);
+            foreach (var existing in document.RootElement.EnumerateArray())
+            {
+                if (existing.TryGetProperty("name", out var name)
+                    && existing.TryGetProperty("properties", out var properties)
+                    && properties.TryGetProperty("device.string", out var existingDevice)
+                    && string.Equals(existingDevice.GetString(), device, StringComparison.Ordinal)
+                    && !string.IsNullOrEmpty(name.GetString()))
+                    return name.GetString()!;
+            }
+            return null;
+        }
+
+        private static string? GetObjectName(string line)
+        {
+            var fields = line.Split('\t');
+            return fields.Length > 1 ? fields[1].Trim() : null;
         }
 
         private static async Task MoveSinkInputsAsync(string sink)
