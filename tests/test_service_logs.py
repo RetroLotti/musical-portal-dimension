@@ -40,6 +40,10 @@ class ServiceLogTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 service_logs.read_request()
 
+    def test_power_diagnostic_is_allowed_by_web_api(self):
+        manager_source = (ROOT / "misc/ServiceLogsManager.cs").read_text(encoding="utf-8")
+        self.assertIn('"power"', manager_source)
+
     def test_logs_redact_common_credential_fields(self):
         content = 'apiKey="private-key" client_secret=private-secret Authorization: BearerToken\n'
         redacted = service_logs.redact_logs(content)

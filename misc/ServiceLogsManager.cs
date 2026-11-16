@@ -8,7 +8,7 @@ namespace MusicDimension.misc
         private static readonly string StatusPath = "/var/lib/musicdimension-receiver/log-status.json";
         private static readonly HashSet<string> Services = new(StringComparer.Ordinal)
         {
-            "app", "audio", "soloist", "receiver", "bluetooth", "bluetooth-daemon"
+            "app", "audio", "soloist", "receiver", "bluetooth", "bluetooth-daemon", "power"
         };
         private static readonly JsonSerializerOptions Settings = new(JsonSerializerDefaults.Web);
         private const long MaximumStatusSize = 192 * 1024;

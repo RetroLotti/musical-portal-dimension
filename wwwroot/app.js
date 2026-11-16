@@ -124,23 +124,9 @@ async function refreshPlaybackStatus() {
   playbackStatusLoading = true;
   try {
     const status = await request("/api/playback/status");
-    const title = document.querySelector("#nowPlayingHeading");
-    const state = document.querySelector("#nowPlayingState");
-    const progress = document.querySelector("#nowPlayingProgress");
-    title.textContent = status.active ? status.track || "Unknown track" : "Nothing playing";
-    state.textContent = status.active ? status.isPlaying ? "Playing" : "Paused" : "Idle";
-    state.classList.toggle("is-playing", status.active && status.isPlaying);
-    document.querySelector("#nowPlayingSource").textContent = status.source
-      ? `${status.source === "spotify" ? "Spotify" : "Local media"}${status.device ? ` · ${status.device}` : ""}`
-      : "No active tag";
-    document.querySelector("#nowPlayingOutput").textContent = `Output: ${audioOutputName(status.audioOutput)}`;
-    document.querySelector("#nowPlayingVolume").textContent = status.volume == null ? "Volume unavailable" : `Volume ${status.volume}%`;
     const duration = Math.max(0, status.durationMs ?? 0);
     const position = Math.max(0, status.positionMs ?? 0);
     const progressValue = duration > 0 ? Math.min(1000, Math.round(position / duration * 1000)) : 0;
-    progress.value = progressValue;
-    document.querySelector("#nowPlayingElapsed").textContent = formatPlaybackTime(position);
-    document.querySelector("#nowPlayingDuration").textContent = formatPlaybackTime(duration);
     document.querySelector("#siteNowPlayingTitle").textContent = status.active ? status.track || "Unknown track" : "Waiting for a music tag";
     document.querySelector("#siteNowPlayingState").textContent = status.active ? status.isPlaying ? "Playing" : "Paused" : "Idle";
     document.querySelector("#siteNowPlayingSource").textContent = status.source
@@ -151,7 +137,6 @@ async function refreshPlaybackStatus() {
     document.querySelector("#siteNowPlayingElapsed").textContent = formatPlaybackTime(position);
     document.querySelector("#siteNowPlayingDuration").textContent = formatPlaybackTime(duration);
   } catch (error) {
-    document.querySelector("#nowPlayingState").textContent = "Unavailable";
     document.querySelector("#siteNowPlayingState").textContent = "Status unavailable";
   } finally {
     playbackStatusLoading = false;
