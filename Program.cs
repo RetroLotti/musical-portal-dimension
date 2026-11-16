@@ -408,6 +408,10 @@
                 case "volumeup": await ChangeVolumeAsync(10); break;
                 case "volumedown": await ChangeVolumeAsync(-10); break;
                 case "shuffle": await ToggleShuffleAsync(); break;
+                case "playpause":
+                    if (_currentPlaybackSource == SourceTypes.Spotify) await _spotifyHandler.TogglePlaybackAsync();
+                    else _localMusicHandler.TogglePlayback();
+                    break;
                 default: throw new ArgumentException("Choose a supported playback action.", nameof(action));
             }
         }
@@ -471,7 +475,7 @@
         {
             var audioOutput = tag.AudioOutput == "default" ? _config.DefaultAudioOutput : tag.AudioOutput;
             if (audioOutput.StartsWith("bluetooth:", StringComparison.OrdinalIgnoreCase)
-                && !await BluetoothManager.EnsureConnectedAsync(audioOutput[10..]))
+                && (!_config.BluetoothEnabled || !await BluetoothManager.EnsureConnectedAsync(audioOutput[10..], _config.BluetoothEnabled)))
             {
                 Console.WriteLine($"Bluetooth output for tag {tag.Uid} is unavailable; using the headphone output.");
                 await AudioOutputController.SelectAsync("headphones");

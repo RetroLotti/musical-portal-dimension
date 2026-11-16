@@ -14,8 +14,9 @@ namespace MusicDimension.misc
             && File.Exists("/usr/local/lib/musicdimension/configure-bluetooth.py")
             && Directory.Exists(Path.GetDirectoryName(RequestPath));
 
-        public static BluetoothStatus GetStatus()
+        public static BluetoothStatus GetStatus(bool bluetoothEnabled = true)
         {
+            if (!bluetoothEnabled) return new(IsManaged, null, "disabled", null, "Bluetooth is disabled in Spotify settings.", []);
             if (!IsManaged) return new(false, null, "unmanaged", null, "Bluetooth audio management is available after running the updated Raspberry Pi installer.", []);
             try
             {
@@ -31,8 +32,9 @@ namespace MusicDimension.misc
             }
         }
 
-        public static string StartOperation(string operation, string? address = null)
+        public static string StartOperation(string operation, string? address = null, bool bluetoothEnabled = true)
         {
+            if (!bluetoothEnabled) throw new InvalidOperationException("Enable Bluetooth in Spotify settings before using Bluetooth devices.");
             if (!IsManaged) throw new InvalidOperationException("Bluetooth audio management is only available after installing on Raspberry Pi OS.");
             if (operation is not ("scan" or "refresh" or "connect")) throw new ArgumentException("Choose a Bluetooth scan, refresh, or connect operation.");
             if (operation == "connect" && (address == null || !AddressPattern.IsMatch(address)))
@@ -55,8 +57,9 @@ namespace MusicDimension.misc
             return requestId;
         }
 
-        public static async Task<bool> EnsureConnectedAsync(string address, CancellationToken cancellationToken = default)
+        public static async Task<bool> EnsureConnectedAsync(string address, bool bluetoothEnabled = true, CancellationToken cancellationToken = default)
         {
+            if (!bluetoothEnabled) return false;
             if (!AddressPattern.IsMatch(address)) return false;
             if (await AudioOutputController.IsBluetoothSinkAvailableAsync(address))
             {

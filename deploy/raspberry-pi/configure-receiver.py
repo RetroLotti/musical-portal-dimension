@@ -31,11 +31,12 @@ def read_settings():
     config = read_json(CONFIG, 65536)
     receiver = config.get("receiver", {})
     enabled = receiver.get("enabled", True)
+    bluetooth_enabled = config.get("bluetoothEnabled", True)
     name = config.get("spotifyDeviceName", "")
     device = receiver.get("audioDevice", "plughw:CARD=Headphones,DEV=0")
     bitrate = receiver.get("bitrate", 160)
     key = read_json(KEY, 8192) if KEY.exists() else ""
-    if type(enabled) is not bool or type(bitrate) is not int or bitrate not in (96, 160, 320):
+    if type(enabled) is not bool or type(bluetooth_enabled) is not bool or type(bitrate) is not int or bitrate not in (96, 160, 320):
         raise ValueError("Invalid receiver enablement or bitrate")
     if not isinstance(name, str) or not name.strip() or len(name) > 100 or any(ord(char) < 32 or ord(char) == 127 for char in name):
         raise ValueError("Enter a receiver name between 1 and 100 characters")
@@ -43,7 +44,7 @@ def read_settings():
         raise ValueError("Invalid ALSA device")
     if not isinstance(key, str) or len(key) > 4096 or any(ord(char) < 33 or ord(char) > 126 for char in key):
         raise ValueError("Invalid Soloist API key")
-    return enabled, name, device, key
+    return enabled, name, device, key, bluetooth_enabled
 
 
 def atomic_write(path, content, mode):
@@ -69,17 +70,21 @@ def set_runtime_owner():
 
 
 def apply_settings():
-    enabled, name, device, key = read_settings()
+    enabled, name, device, key, bluetooth_enabled = read_settings()
     content = json.dumps({"name": name, "apiKey": key}, ensure_ascii=False)
-    audio = "\n".join([
+    audio_lines = [
         ".fail",
         "load-module module-native-protocol-unix socket=/run/musicdimension-audio/native",
         "load-module module-alsa-sink device=" + device + " sink_name=musicdimension",
-        "load-module module-bluetooth-discover",
+    ]
+    if bluetooth_enabled:
+        audio_lines.append("load-module module-bluetooth-discover")
+    audio_lines.extend([
         "set-default-sink musicdimension",
         "load-module module-suspend-on-idle timeout=5",
         "",
     ])
+    audio = "\n".join(audio_lines)
     changed = not ENVIRONMENT.exists() or ENVIRONMENT.read_text(encoding="utf-8") != content
     audio_changed = not AUDIO.exists() or AUDIO.read_text(encoding="utf-8") != audio
     if changed:
@@ -103,6 +108,7 @@ def apply_settings():
     except (OSError, ValueError):
         update = None
     return dict(managed=True, backend="soloist", enabled=enabled, name=name, audioDevice=device,
+                bluetoothEnabled=bluetooth_enabled,
                 activeState=active, credentialsCached=False, apiKeyConfigured=bool(key), update=update,
                 error=None if key or not enabled else "Save your Spotify Soloist API key in Spotify settings. It is separate from Web API authorization.")
 

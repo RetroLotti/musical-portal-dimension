@@ -11,6 +11,7 @@ namespace MusicDimension.models
         string? ClientId,
         string? SpotifyDeviceName,
         bool ReceiverEnabled,
+        bool? BluetoothEnabled,
         string? AudioDevice,
         string? DefaultAudioOutput,
         int Bitrate,

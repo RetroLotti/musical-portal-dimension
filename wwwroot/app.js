@@ -23,6 +23,7 @@ let editingUid = null;
 let spotifyEnabled = false;
 let bluetoothDevices = [];
 let bluetoothManaged = false;
+let bluetoothEnabled = true;
 let alsaDevices = [];
 let mediaMaxFileSizeMb = 512;
 let selectedMediaPaths = new Set();
@@ -64,8 +65,9 @@ function renderAudioOutputOptions(selected = document.querySelector("#audioOutpu
     new Option(`Use global default (${audioOutputName(globalOutput)})`, "default"),
     new Option("Pi configured output (headphone/HDMI)", "headphones")
   ];
-  for (const device of bluetoothDevices.filter(item => item.paired)) {
-    options.push(new Option(`${device.name}${device.connected ? " (connected)" : ""}`, `bluetooth:${device.address}`));
+  if (bluetoothEnabled) {
+    for (const device of bluetoothDevices.filter(item => item.paired))
+      options.push(new Option(`${device.name}${device.connected ? " (connected)" : ""}`, `bluetooth:${device.address}`));
   }
   for (const device of alsaDevices) options.push(new Option(device.name, `alsa:${device.id}`));
   if (selected !== "headphones" && selected !== "default" && !options.some(option => option.value === selected))
@@ -77,8 +79,9 @@ function renderAudioOutputOptions(selected = document.querySelector("#audioOutpu
 function renderDefaultAudioOutputOptions(selected = document.querySelector("#defaultAudioOutput").value) {
   const picker = document.querySelector("#defaultAudioOutput");
   const options = [new Option("Pi configured output (headphone/HDMI)", "headphones")];
-  for (const device of bluetoothDevices.filter(item => item.paired)) {
-    options.push(new Option(`${device.name}${device.connected ? " (connected)" : ""}`, `bluetooth:${device.address}`));
+  if (bluetoothEnabled) {
+    for (const device of bluetoothDevices.filter(item => item.paired))
+      options.push(new Option(`${device.name}${device.connected ? " (connected)" : ""}`, `bluetooth:${device.address}`));
   }
   for (const device of alsaDevices) options.push(new Option(device.name, `alsa:${device.id}`));
   if (selected !== "headphones" && !options.some(option => option.value === selected))
@@ -94,7 +97,7 @@ function renderBluetoothDevicePicker(devices) {
     options.push(new Option(`${device.name} - ${device.address}${device.connected ? " (connected)" : device.paired ? " (paired)" : ""}`, device.address));
   }
   picker.replaceChildren(...options);
-  picker.disabled = devices.length === 0;
+  picker.disabled = !bluetoothEnabled || devices.length === 0;
   updateBluetoothConnectButton();
 }
 
@@ -102,7 +105,7 @@ function updateBluetoothConnectButton() {
   const picker = document.querySelector("#bluetoothDevicePicker");
   const button = document.querySelector("#connectBluetoothButton");
   const device = bluetoothDevices.find(item => item.address === picker.value);
-  button.disabled = !device;
+  button.disabled = !bluetoothEnabled || !device;
   button.textContent = device?.paired ? "Reconnect" : "Pair / connect";
 }
 
@@ -947,14 +950,15 @@ async function loadBluetoothStatus() {
     request("/api/audio/alsa")
   ]);
   bluetoothManaged = status.managed;
+  bluetoothEnabled = status.state !== "disabled";
   bluetoothDevices = status.devices ?? [];
   alsaDevices = outputs ?? [];
   renderBluetoothDevicePicker(bluetoothDevices);
   renderDefaultAudioOutputOptions();
   renderAudioOutputOptions();
   document.querySelector("#bluetoothMessage").textContent = status.message ?? "";
-  document.querySelector("#scanBluetoothButton").disabled = status.state === "running";
-  document.querySelector("#refreshBluetoothButton").disabled = status.state === "running";
+  document.querySelector("#scanBluetoothButton").disabled = !bluetoothEnabled || status.state === "running";
+  document.querySelector("#refreshBluetoothButton").disabled = !bluetoothEnabled || status.state === "running";
 }
 
 async function runBluetoothOperation(operation) {
@@ -1000,8 +1004,8 @@ async function runBluetoothOperation(operation) {
     message.classList.add("error");
     message.textContent = error.message;
   } finally {
-    scanButton.disabled = false;
-    refreshButton.disabled = false;
+    scanButton.disabled = !bluetoothEnabled;
+    refreshButton.disabled = !bluetoothEnabled;
     updateBluetoothConnectButton();
   }
 }
@@ -1139,6 +1143,8 @@ async function loadSpotifySettings() {
   document.querySelector("#spotifyClearSecret").checked = false;
   document.querySelector("#receiverEnabled").checked = settings.receiver?.enabled ?? true;
   document.querySelector("#receiverAudioDevice").value = settings.receiver?.audioDevice ?? "plughw:CARD=Headphones,DEV=0";
+  bluetoothEnabled = settings.receiver?.bluetoothEnabled ?? true;
+  document.querySelector("#bluetoothEnabled").checked = bluetoothEnabled;
   renderDefaultAudioOutputOptions(settings.defaultAudioOutput ?? "headphones");
   document.querySelector("#soloistApiKey").value = "";
   document.querySelector("#soloistApiKey").placeholder = settings.receiver?.hasSoloistApiKey ? "Saved (unchanged)" : "Not set";
@@ -1249,6 +1255,7 @@ async function saveSpotifySettings(event) {
         enable: document.querySelector("#spotifyEnable").checked,
         spotifyDeviceName: document.querySelector("#spotifyDeviceName").value,
         defaultAudioOutput: document.querySelector("#defaultAudioOutput").value,
+        bluetoothEnabled: document.querySelector("#bluetoothEnabled").checked,
         clientId: document.querySelector("#spotifyClientId").value,
         clientSecret: document.querySelector("#spotifyClearSecret").checked
           ? "" : document.querySelector("#spotifyClientSecret").value || null,
@@ -1459,6 +1466,17 @@ for (const [index, tab] of sectionTabs.entries()) {
 }
 
 document.querySelector("#spotifySettingsForm").addEventListener("submit", saveSpotifySettings);
+document.querySelector("#bluetoothEnabled").addEventListener("change", event => {
+  bluetoothEnabled = event.target.checked;
+  if (!bluetoothEnabled && document.querySelector("#defaultAudioOutput").value.startsWith("bluetooth:"))
+    document.querySelector("#defaultAudioOutput").value = "headphones";
+  renderDefaultAudioOutputOptions();
+  renderAudioOutputOptions();
+  renderTags();
+  updateBluetoothConnectButton();
+  document.querySelector("#scanBluetoothButton").disabled = !bluetoothEnabled;
+  document.querySelector("#refreshBluetoothButton").disabled = !bluetoothEnabled;
+});
 document.querySelector("#defaultAudioOutput").addEventListener("change", () => {
   renderAudioOutputOptions();
   renderTags();

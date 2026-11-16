@@ -92,27 +92,12 @@
         <p class="eyebrow">PLAYBACK CONTROLS</p>
         <h2 id="controlHeading">Playback control tags</h2>
       </div>
-      <section class="now-playing-panel" aria-labelledby="nowPlayingHeading" aria-live="polite">
-        <div class="now-playing-title-row">
-          <div>
-            <p class="eyebrow">NOW PLAYING</p>
-            <h3 id="nowPlayingHeading">Nothing playing</h3>
-          </div>
-          <span id="nowPlayingState" class="now-playing-state">Idle</span>
-        </div>
-        <div class="now-playing-meta">
-          <span id="nowPlayingSource">No active tag</span>
-          <span id="nowPlayingOutput">Output unavailable</span>
-          <span id="nowPlayingVolume">Volume --</span>
-        </div>
-        <progress id="nowPlayingProgress" class="now-playing-progress" max="1000" value="0" aria-label="Track progress"></progress>
-        <div class="now-playing-time"><time id="nowPlayingElapsed">0:00</time><time id="nowPlayingDuration">0:00</time></div>
-      </section>
       <div class="web-playback-controls">
         <p class="control-label">On-screen controls</p>
         <div class="playback-button-row">
           <button class="button button-secondary" type="button" data-playback-action="previous">Previous</button>
           <button class="button button-secondary" type="button" data-playback-action="volumedown">Volume down</button>
+          <button class="button button-secondary" type="button" data-playback-action="playpause">Play / pause</button>
           <button class="button button-secondary" type="button" data-playback-action="volumeup">Volume up</button>
           <button class="button button-secondary" type="button" data-playback-action="shuffle">Shuffle</button>
           <button class="button button-secondary" type="button" data-playback-action="next">Next</button>
@@ -233,6 +218,10 @@
           </select>
           <span class="field-note">Used by tags set to Use global default. Individual tags can override this.</span>
         </div>
+        <label class="spotify-toggle" for="bluetoothEnabled">
+          <input id="bluetoothEnabled" type="checkbox" checked>
+          Enable Bluetooth audio
+        </label>
         <fieldset id="receiverSettings" class="receiver-settings" disabled>
           <legend>Pi Spotify Connect receiver</legend>
           <label class="spotify-toggle" for="receiverEnabled">

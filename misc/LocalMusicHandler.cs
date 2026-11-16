@@ -133,6 +133,12 @@
             Player.Play();
         }
 
+        public void TogglePlayback()
+        {
+            if (Player.IsPlaying) Player.Pause();
+            else Player.Play();
+        }
+
         public void NextTrack()
         {
             lock (_playlistLock)

@@ -587,6 +587,21 @@
             });
         }
 
+        public async Task TogglePlaybackAsync()
+        {
+            await ExecuteAsync(async spotify =>
+            {
+                var deviceId = await GetDeviceIdAsync(spotify, activate: true);
+                var playback = await spotify.Player.GetCurrentPlayback();
+                if (playback?.Device?.Id != deviceId)
+                    throw new InvalidOperationException("The configured Spotify device has no playback to toggle.");
+                if (playback.IsPlaying)
+                    await spotify.Player.PausePlayback(new PlayerPausePlaybackRequest { DeviceId = deviceId });
+                else
+                    await spotify.Player.ResumePlayback(new PlayerResumePlaybackRequest { DeviceId = deviceId });
+            });
+        }
+
         public async Task StopAsync()
         {
             await PauseAsync();

@@ -28,6 +28,9 @@
         [JsonProperty("defaultAudioOutput")]
         public string DefaultAudioOutput { get; set; } = "headphones";
 
+        [JsonProperty("bluetoothEnabled")]
+        public bool BluetoothEnabled { get; set; } = true;
+
         [JsonIgnore]
         public string TokenFileName { get; set; } = null!;
     }

@@ -26,6 +26,7 @@ class ReceiverConfigurationTests(unittest.TestCase):
         self.key.write_text(json.dumps("fixture-private-key"))
         self.status = root / "status.json"
         self.settings = {"spotifyDeviceName": 'Music Dimension "Living Room"',
+                         "bluetoothEnabled": True,
                          "receiver": {"enabled": True, "audioDevice": "plughw:CARD=Headphones,DEV=0", "bitrate": 160}}
         self.save()
         for name, value in (("CONFIG", self.config), ("KEY", self.key), ("ENVIRONMENT", self.environment), ("AUDIO", self.audio), ("STATUS", self.status), ("UPDATE", root / "update.json")):
@@ -81,6 +82,24 @@ class ReceiverConfigurationTests(unittest.TestCase):
         self.assertIn(("restart", "musicdimension-soloist.service"), self.commands)
         self.assertIn(("restart", "musicdimension-audio.service"), self.commands)
         self.assertTrue(all("musicdimension.service" not in command for command in self.commands))
+
+    def test_disabling_bluetooth_removes_pulse_discovery_module(self):
+        receiver.apply_settings()
+        self.commands.clear()
+        self.settings["bluetoothEnabled"] = False
+        self.save()
+        status = receiver.apply_settings()
+        self.assertNotIn("module-bluetooth-discover", self.audio.read_text(encoding="utf-8"))
+        self.assertIn(("restart", "musicdimension-audio.service"), self.commands)
+        self.assertFalse(status["bluetoothEnabled"])
+
+        self.commands.clear()
+        self.settings["bluetoothEnabled"] = True
+        self.save()
+        status = receiver.apply_settings()
+        self.assertIn("module-bluetooth-discover", self.audio.read_text(encoding="utf-8"))
+        self.assertIn(("restart", "musicdimension-audio.service"), self.commands)
+        self.assertTrue(status["bluetoothEnabled"])
 
     def test_disable_stops_receiver(self):
         self.settings["receiver"]["enabled"] = False
@@ -176,8 +195,9 @@ class ReceiverConfigurationTests(unittest.TestCase):
         bluetooth_controls = index.index('<div class="bluetooth-tools">')
         self.assertGreater(bluetooth_controls, receiver_fieldset_end)
         app_script = (ROOT / "wwwroot/app.js").read_text()
-        self.assertIn('document.querySelector("#scanBluetoothButton").disabled = status.state === "running"', app_script)
-        self.assertIn("button.disabled = !device", app_script)
+        self.assertIn('document.querySelector("#bluetoothEnabled").checked = bluetoothEnabled', app_script)
+        self.assertIn('document.querySelector("#scanBluetoothButton").disabled = !bluetoothEnabled || status.state === "running"', app_script)
+        self.assertIn("button.disabled = !bluetoothEnabled || !device", app_script)
         log_unit = (ROOT / "deploy/raspberry-pi/musicdimension-logs.service").read_text()
         self.assertIn("read-service-logs.py", log_unit)
         self.assertIn("NoNewPrivileges=true", log_unit)
